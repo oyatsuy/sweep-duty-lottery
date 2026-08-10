@@ -415,11 +415,25 @@
   function defaultStudents(){
     var arr = []; for(var i=1;i<=33;i++){ arr.push((i<10?'0':'')+i); } return arr;
   }
+  var DEFAULT_ZONE_OPTIONS = ['教室內部','教室外走廊','5F團體輔導室','通達樓5F女廁'];
+  var DEFAULT_MANAGER_OPTIONS = ['衛生股長','衛生幹事'];
   function freshState(){
-    return { students: defaultStudents(), jobs: defaultJobs(), assignments:{}, round:1, history:[], avoidRepeat:false, started:false, animStyle:'tube' };
+    return { students: defaultStudents(), jobs: defaultJobs(), assignments:{}, round:1, history:[], avoidRepeat:false, started:false, animStyle:'tube', zoneOptions: DEFAULT_ZONE_OPTIONS.slice(), managerOptions: DEFAULT_MANAGER_OPTIONS.slice() };
   }
   var state = load() || freshState();
   if(!state.animStyle) state.animStyle = 'tube';
+  if(!state.zoneOptions) state.zoneOptions = DEFAULT_ZONE_OPTIONS.slice();
+  if(!state.managerOptions) state.managerOptions = DEFAULT_MANAGER_OPTIONS.slice();
+  function effectiveZoneOptions(){
+    var opts = state.zoneOptions.slice();
+    state.jobs.forEach(function(j){ if(j.zone && opts.indexOf(j.zone)===-1) opts.push(j.zone); });
+    return opts;
+  }
+  function effectiveManagerOptions(){
+    var opts = state.managerOptions.slice();
+    state.jobs.forEach(function(j){ if(j.manager && opts.indexOf(j.manager)===-1) opts.push(j.manager); });
+    return opts;
+  }
 
   function load(){ try{ var raw = localStorage.getItem(STORAGE_KEY); return raw? JSON.parse(raw): null; }catch(e){ return null; } }
   function save(){ try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }catch(e){} }
@@ -477,11 +491,6 @@
   });
 
   var jobTableBody = document.getElementById('jobTableBody');
-  var dl = document.createElement('datalist'); dl.id='zoneOptions';
-  ['教室內部','教室外走廊','5F團體輔導室','通達樓5F女廁'].forEach(function(z){ var o=document.createElement('option'); o.value=z; dl.appendChild(o); });
-  var dlMgr = document.createElement('datalist'); dlMgr.id='managerOptions';
-  ['衛生股長','衛生幹事'].forEach(function(m){ var o=document.createElement('option'); o.value=m; dlMgr.appendChild(o); });
-  document.body.appendChild(dl); document.body.appendChild(dlMgr);
 
   function renderJobTable(){
     jobTableBody.innerHTML = '';
@@ -494,9 +503,22 @@
       tdName.appendChild(inName); tr.appendChild(tdName);
 
       var tdZone = document.createElement('td');
-      var inZone = document.createElement('input'); inZone.type='text'; inZone.value=job.zone; inZone.setAttribute('list','zoneOptions');
-      inZone.addEventListener('input', function(){ job.zone = inZone.value; save(); });
-      tdZone.appendChild(inZone); tr.appendChild(tdZone);
+      var selZone = document.createElement('select');
+      effectiveZoneOptions().forEach(function(z){
+        var opt = document.createElement('option'); opt.value=z; opt.textContent=z;
+        if(job.zone===z) opt.selected=true; selZone.appendChild(opt);
+      });
+      var addZoneOpt = document.createElement('option'); addZoneOpt.value='__add__'; addZoneOpt.textContent='＋ 新增分區…'; selZone.appendChild(addZoneOpt);
+      selZone.addEventListener('change', function(){
+        if(selZone.value === '__add__'){
+          var name = (prompt('輸入新的分區名稱：','')||'').trim();
+          if(name){
+            if(state.zoneOptions.indexOf(name)===-1) state.zoneOptions.push(name);
+            job.zone = name; save(); renderJobTable();
+          } else { selZone.value = job.zone; }
+        } else { job.zone = selZone.value; save(); }
+      });
+      tdZone.appendChild(selZone); tr.appendChild(tdZone);
 
       var tdFreq = document.createElement('td');
       var selFreq = document.createElement('select');
@@ -513,9 +535,22 @@
       tdCount.appendChild(inCount); tr.appendChild(tdCount);
 
       var tdMgr = document.createElement('td');
-      var inMgr = document.createElement('input'); inMgr.type='text'; inMgr.value=job.manager||''; inMgr.setAttribute('list','managerOptions');
-      inMgr.addEventListener('input', function(){ job.manager = inMgr.value; save(); });
-      tdMgr.appendChild(inMgr); tr.appendChild(tdMgr);
+      var selMgr = document.createElement('select');
+      effectiveManagerOptions().forEach(function(m){
+        var opt = document.createElement('option'); opt.value=m; opt.textContent=m;
+        if((job.manager||'')===m) opt.selected=true; selMgr.appendChild(opt);
+      });
+      var addMgrOpt = document.createElement('option'); addMgrOpt.value='__add__'; addMgrOpt.textContent='＋ 新增幹部…'; selMgr.appendChild(addMgrOpt);
+      selMgr.addEventListener('change', function(){
+        if(selMgr.value === '__add__'){
+          var name = (prompt('輸入新的負責幹部名稱：','')||'').trim();
+          if(name){
+            if(state.managerOptions.indexOf(name)===-1) state.managerOptions.push(name);
+            job.manager = name; save(); renderJobTable();
+          } else { selMgr.value = job.manager||''; }
+        } else { job.manager = selMgr.value; save(); }
+      });
+      tdMgr.appendChild(selMgr); tr.appendChild(tdMgr);
 
       var tdNote = document.createElement('td');
       var inNote = document.createElement('input'); inNote.type='text'; inNote.value=job.note;
@@ -564,7 +599,7 @@
   });
 
   document.getElementById('exportConfigBtn').addEventListener('click', function(){
-    var payload = { students: state.students, jobs: state.jobs, animStyle: state.animStyle };
+    var payload = { students: state.students, jobs: state.jobs, animStyle: state.animStyle, zoneOptions: state.zoneOptions, managerOptions: state.managerOptions };
     var blob = new Blob(['﻿'+JSON.stringify(payload,null,2)], {type:'application/json;charset=utf-8;'});
     var url = URL.createObjectURL(blob);
     var a = document.createElement('a'); a.href=url; a.download='掃地工作設定.json';
@@ -583,6 +618,8 @@
         if(Array.isArray(data.students)) state.students = data.students;
         if(Array.isArray(data.jobs)) state.jobs = data.jobs;
         if(data.animStyle) state.animStyle = data.animStyle;
+        if(Array.isArray(data.zoneOptions)) state.zoneOptions = data.zoneOptions;
+        if(Array.isArray(data.managerOptions)) state.managerOptions = data.managerOptions;
         studentInput.value = state.students.join('\n');
         save(); renderJobTable(); renderSetupBanner();
       }catch(err){ alert('這個檔案格式讀不了，請確認是從「匯出設定」下載的 JSON 檔。'); }
