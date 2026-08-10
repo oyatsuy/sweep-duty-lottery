@@ -240,7 +240,7 @@
         </div>
         <div class="card">
           <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;">
-            <label class="field-label" style="margin-bottom:0;">工作清單（每項工作預設 1 人，責任獨立、無法互推）</label>
+            <label class="field-label" style="margin-bottom:0;">工作清單（每項工作預設 1 人，分工清楚）</label>
             <button class="btn btn-wood btn-sm" id="addJobBtn" type="button">＋ 新增工作</button>
           </div>
           <p class="hint">「頻率」「負責幹部」只是標籤與列印用，不影響抽籤；請確認「工作總人數」與「全班人數」相符再開始抽籤。</p>
@@ -516,7 +516,7 @@
             if(state.zoneOptions.indexOf(name)===-1) state.zoneOptions.push(name);
             job.zone = name; save(); renderJobTable();
           } else { selZone.value = job.zone; }
-        } else { job.zone = selZone.value; save(); }
+        } else { job.zone = selZone.value; save(); updateTitle(); }
       });
       tdZone.appendChild(selZone); tr.appendChild(tdZone);
 
@@ -564,12 +564,35 @@
 
       jobTableBody.appendChild(tr);
     });
+    updateTitle();
   }
 
   document.getElementById('addJobBtn').addEventListener('click', function(){
     state.jobs.push({ id:'job'+Date.now(), zone:'教室內部', name:'新工作', freq:'daily', count:1, manager:'衛生股長', note:'' });
     save(); renderJobTable(); renderSetupBanner();
   });
+
+  // 自動依目前「工作清單」裡出現的分區，產生 30 字內的摘要，寫進分頁標題。
+  // 這是規則式的自動偵測（讀取你在網頁上設定的分區），不是每次呼叫線上 AI——
+  // 純前端的工具沒有後端可以安全存放 API 金鑰，所以用這個方式在換掃區時自動跟著更新，不用每次手動改標題。
+  function buildZoneSummary(){
+    var zones = [];
+    state.jobs.forEach(function(j){ if(j.zone && zones.indexOf(j.zone)===-1) zones.push(j.zone); });
+    if(zones.length===0) return '';
+    var out = '';
+    for(var i=0;i<zones.length;i++){
+      var candidate = out ? (out + '、' + zones[i]) : zones[i];
+      if(candidate.length > 30){
+        out = out ? (out + '…') : (zones[i].slice(0,29) + '…');
+        return out;
+      }
+      out = candidate;
+    }
+    return out;
+  }
+  function updateTitle(){
+    document.title = buildZoneSummary() || '掃地工作抽籤';
+  }
 
   function totalJobCount(){ return state.jobs.reduce(function(sum,j){ return sum+(j.count||0); },0); }
   function renderSetupBanner(){
