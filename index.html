@@ -1,0 +1,903 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>掃地工作抽籤</title>
+<meta name="description" content="全班掃地工作分配抽籤工具：每項工作單一負責人，含轉盤/老虎機抽籤動畫、可依實際場地編輯、負責幹部分組列印。資料只存在本機瀏覽器。">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧹</text></svg>">
+</head>
+<body>
+<style>
+  :root{
+    --paper:#EEE8D6;
+    --paper-raised:#F7F2E4;
+    --ink:#241F16;
+    --ink-soft:#5B5443;
+    --board:#2F4A3D;
+    --board-deep:#22362C;
+    --wood:#B5793E;
+    --wood-deep:#8A5A2A;
+    --stamp:#A93B32;
+    --slate:#4C6C7D;
+    --gold:#B98A22;
+    --teal:#3E7A72;
+    --line: rgba(36,31,22,0.14);
+    --shadow: 0 6px 18px rgba(34,29,20,0.14);
+    --radius: 14px;
+    --font-head: 'Noto Serif TC','PMingLiU','Microsoft JhengHei',serif;
+    --font-body: 'Noto Sans TC','Microsoft JhengHei','PingFang TC',sans-serif;
+    --font-num: ui-monospace,'SFMono-Regular',Consolas,'Courier New',monospace;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --paper:#1E2B22; --paper-raised:#25352A; --ink:#EBE6D2; --ink-soft:#B9B39C;
+      --board:#7FAE96; --board-deep:#9CC7AE; --wood:#D79A56; --wood-deep:#B57A3B;
+      --stamp:#E2695E; --slate:#8FB6C9; --gold:#E0B94B; --teal:#6FBDB2;
+      --line: rgba(235,230,210,0.16); --shadow: 0 6px 20px rgba(0,0,0,0.4);
+    }
+  }
+  :root[data-theme="dark"]{
+    --paper:#1E2B22; --paper-raised:#25352A; --ink:#EBE6D2; --ink-soft:#B9B39C;
+    --board:#7FAE96; --board-deep:#9CC7AE; --wood:#D79A56; --wood-deep:#B57A3B;
+    --stamp:#E2695E; --slate:#8FB6C9; --gold:#E0B94B; --teal:#6FBDB2;
+    --line: rgba(235,230,210,0.16); --shadow: 0 6px 20px rgba(0,0,0,0.4);
+  }
+  :root[data-theme="light"]{
+    --paper:#EEE8D6; --paper-raised:#F7F2E4; --ink:#241F16; --ink-soft:#5B5443;
+    --board:#2F4A3D; --board-deep:#22362C; --wood:#B5793E; --wood-deep:#8A5A2A;
+    --stamp:#A93B32; --slate:#4C6C7D; --gold:#B98A22; --teal:#3E7A72;
+    --line: rgba(36,31,22,0.14); --shadow: 0 6px 18px rgba(34,29,20,0.14);
+  }
+
+  .sweep-app *{ box-sizing:border-box; }
+  .sweep-app{
+    font-family: var(--font-body); color: var(--ink); background: var(--paper);
+    max-width: 1040px; margin: 0 auto; padding: 28px 20px 64px; line-height: 1.55;
+  }
+  .sweep-app h1,.sweep-app h2,.sweep-app h3{ font-family: var(--font-head); text-wrap: balance; margin: 0; color: var(--ink); }
+  .hero{ text-align:center; padding: 18px 8px 26px; border-bottom: 1px solid var(--line); margin-bottom: 22px; }
+  .eyebrow{ font-size:.8rem; letter-spacing:.14em; text-transform:uppercase; color: var(--wood-deep); font-weight:600; margin:0 0 8px; }
+  @media (prefers-color-scheme:dark){ .eyebrow{ color: var(--wood); } }
+  :root[data-theme="dark"] .eyebrow{ color: var(--wood); }
+  .hero h1{ font-size: clamp(1.7rem, 3vw, 2.3rem); font-weight:700; }
+  .hero .sub{ color: var(--ink-soft); max-width: 50ch; margin: 10px auto 0; font-size:.96rem; }
+
+  .stepper{ display:flex; gap:8px; justify-content:center; margin-bottom:22px; flex-wrap:wrap; }
+  .step-btn{
+    font-family: var(--font-body); font-weight:600; font-size:.92rem;
+    padding:9px 18px; border-radius: 999px; border:1px solid var(--line);
+    background: var(--paper-raised); color: var(--ink-soft); cursor:pointer;
+    transition: background .15s, color .15s, border-color .15s;
+  }
+  .step-btn:hover{ border-color: var(--wood); }
+  .step-btn.active{ background: var(--board); color: var(--paper); border-color: var(--board); }
+  .step-btn:focus-visible{ outline: 2px solid var(--stamp); outline-offset:2px; }
+  .step-btn[disabled]{ opacity:.45; cursor:not-allowed; }
+
+  .panel{ display:none; }
+  .panel.active{ display:block; animation: fade .25s ease; }
+  @keyframes fade{ from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:none;} }
+
+  .card{ background: var(--paper-raised); border:1px solid var(--line); border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow); }
+  .grid-2{ display:grid; grid-template-columns: 1fr 1.5fr; gap:18px; align-items:start; }
+  @media (max-width: 800px){ .grid-2{ grid-template-columns: 1fr; } }
+
+  label.field-label{ display:block; font-weight:600; font-size:.88rem; margin-bottom:6px; color: var(--ink); }
+  .hint{ font-size:.8rem; color: var(--ink-soft); margin: 4px 0 10px; }
+  textarea, input[type=text], input[type=number], select{
+    font-family: var(--font-body); font-size:.92rem; color: var(--ink);
+    background: var(--paper); border:1px solid var(--line); border-radius:8px; padding:8px 10px; width:100%;
+  }
+  input[type=number]{ font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+  textarea{ min-height: 300px; resize: vertical; font-family: var(--font-num); line-height:1.7; }
+  textarea:focus, input:focus, select:focus, button:focus-visible{ outline:2px solid var(--stamp); outline-offset:1px; }
+
+  .seatgen{ display:flex; gap:8px; align-items:end; flex-wrap:wrap; margin-bottom:14px; padding:10px; border:1px dashed var(--line); border-radius:9px; }
+  .seatgen .mini{ display:flex; flex-direction:column; gap:4px; font-size:.76rem; color:var(--ink-soft); }
+  .seatgen input{ width:90px; padding:6px 8px; }
+  .seatgen input.wide{ width:150px; }
+
+  table{ width:100%; border-collapse: collapse; font-size:.86rem; }
+  .table-wrap{ overflow-x:auto; border:1px solid var(--line); border-radius:10px; }
+  th, td{ padding:7px 7px; border-bottom:1px solid var(--line); text-align:left; vertical-align:middle; }
+  th{ font-weight:700; color: var(--ink-soft); font-size:.75rem; text-transform:uppercase; letter-spacing:.04em; background: var(--paper); position:sticky; top:0; }
+  td input, td select{ padding:6px 7px; font-size:.83rem; }
+  td.col-count input{ width:52px; }
+  tr:last-child td{ border-bottom:none; }
+  tr.group-header td{ background: var(--paper); font-weight:700; font-family: var(--font-head); font-size:.95rem; padding-top:12px; }
+
+  .btn{
+    font-family: var(--font-body); font-weight:700; font-size:.9rem; letter-spacing:.01em;
+    padding:10px 20px; border-radius:9px; border:none; cursor:pointer;
+    transition: transform .1s ease, filter .15s ease; color:var(--paper); background: var(--board);
+  }
+  .btn:hover{ filter:brightness(1.08); }
+  .btn:active{ transform: translateY(1px); }
+  .btn[disabled]{ opacity:.4; cursor:not-allowed; filter:none; }
+  .btn-wood{ background: var(--wood); }
+  .btn-stamp{ background: var(--stamp); }
+  .btn-ghost{ background:transparent; color:var(--ink-soft); border:1px solid var(--line); }
+  .btn-sm{ padding:6px 12px; font-size:.8rem; }
+  .btn-row{ display:flex; gap:10px; flex-wrap:wrap; margin-top:14px; align-items:center; }
+
+  .banner{ display:flex; align-items:center; gap:10px; padding:10px 14px; border-radius:9px; font-size:.86rem; font-weight:600; margin: 12px 0; }
+  .banner.ok{ background: color-mix(in srgb, var(--board) 16%, transparent); color: var(--board); border:1px solid var(--board); }
+  .banner.warn{ background: color-mix(in srgb, var(--stamp) 14%, transparent); color: var(--stamp); border:1px solid var(--stamp); }
+  @media (prefers-color-scheme:dark){ .banner.ok{ color: var(--board-deep); } }
+  :root[data-theme="dark"] .banner.ok{ color: var(--board-deep); }
+
+  .zonechip{ display:inline-flex; align-items:center; gap:6px; font-size:.78rem; font-weight:600; }
+  .dot{ width:9px; height:9px; border-radius:50%; display:inline-block; flex:none; }
+  .z-board{ background: var(--board); } .z-wood{ background: var(--wood); }
+  .z-stamp{ background: var(--stamp); } .z-slate{ background: var(--slate); }
+  .z-gold{ background: var(--gold); } .z-teal{ background: var(--teal); }
+  .chip{ display:inline-flex; align-items:center; gap:5px; font-size:.72rem; font-weight:700; padding:3px 9px; border-radius:999px; color:#fff; white-space:nowrap; }
+  .chip.badge-daily{ background: var(--slate); }
+  .chip.badge-x3{ background: var(--stamp); }
+  .chip.badge-flex{ background: var(--gold); color:#28210a; }
+
+  /* draw stage */
+  .draw-stage{ text-align:center; padding: 10px 0 6px; }
+  .draw-controls-top{ display:flex; justify-content:center; gap:10px; align-items:center; margin-bottom:10px; flex-wrap:wrap; }
+  .draw-controls-top label{ font-size:.78rem; color:var(--ink-soft); font-weight:600; }
+  .draw-controls-top select{ width:auto; padding:5px 8px; font-size:.8rem; }
+  .turn-label{ font-size:.85rem; color:var(--ink-soft); font-weight:600; }
+  .turn-name{ font-family: var(--font-head); font-size:2rem; margin:6px 0 22px; }
+  .progress-track{ height:6px; background:var(--line); border-radius:99px; max-width:360px; margin:0 auto 26px; overflow:hidden; }
+  .progress-fill{ height:100%; background:var(--wood); border-radius:99px; transition:width .3s ease; }
+
+  .anim-stage{ min-height: 210px; display:flex; align-items:center; justify-content:center; margin-bottom:8px; }
+
+  .tube-wrap{ position:relative; width:150px; height:190px; }
+  .tube{ position:absolute; bottom:0; left:50%; transform:translateX(-50%); width:126px; height:132px;
+    border-radius: 16px 16px 44px 44px/16px 16px 26px 26px;
+    background: repeating-linear-gradient(90deg, var(--wood) 0 9px, var(--wood-deep) 9px 12px);
+    box-shadow: inset 0 -14px 22px rgba(0,0,0,.22), var(--shadow); border: 1px solid var(--wood-deep); }
+  .stick{ position:absolute; bottom:70px; width:9px; height:96px; border-radius:3px;
+    background: linear-gradient(var(--paper-raised), var(--wood)); transform-origin: bottom center;
+    transition: transform .5s ease, opacity .4s ease; }
+  .stick:nth-child(2){ left:38px; transform: rotate(-9deg); }
+  .stick:nth-child(3){ left:56px; transform: rotate(-2deg); }
+  .stick:nth-child(4){ left:74px; transform: rotate(4deg); }
+  .stick:nth-child(5){ left:92px; transform: rotate(10deg); }
+  .tube-wrap.drawing .stick.active{ transform: translateY(-92px) rotate(0deg); opacity:0; }
+
+  .wheel-wrap{ position:relative; width:210px; height:210px; }
+  .wheel-pointer{ position:absolute; top:-12px; left:50%; transform:translateX(-50%); width:0; height:0;
+    border-left:9px solid transparent; border-right:9px solid transparent; border-top:16px solid var(--stamp); z-index:3; }
+  .wheel{ width:100%; height:100%; border-radius:50%; border:6px solid var(--wood-deep);
+    box-shadow: var(--shadow); transition: transform 2.3s cubic-bezier(.15,.65,.15,1); }
+  .wheel-hub{ position:absolute; top:50%; left:50%; width:24px; height:24px; margin:-12px 0 0 -12px;
+    background: var(--paper-raised); border:3px solid var(--wood-deep); border-radius:50%; z-index:3; }
+
+  .slot-wrap{ width:300px; height:76px; overflow:hidden; border:2px solid var(--wood-deep); border-radius:10px;
+    background: var(--paper); position:relative; box-shadow: var(--shadow); }
+  .slot-track{ position:absolute; left:0; top:0; width:100%; transition: transform 1.5s cubic-bezier(.1,.7,.15,1); }
+  .slot-item{ height:76px; display:flex; align-items:center; justify-content:center; font-weight:700;
+    font-size:.85rem; line-height:1.2; padding:0 12px; text-align:center; }
+
+  .btn-row.center{ justify-content:center; }
+  @media (prefers-reduced-motion: reduce){ .slip, .stick, .wheel, .slot-track{ transition:none !important; } }
+
+  .slip{ max-width:360px; margin:0 auto; background:var(--paper-raised); border:1px solid var(--line);
+    border-radius:10px; padding:0 20px; box-shadow:var(--shadow); transform-origin: top center;
+    transform: scaleY(0); opacity:0; height:0; overflow:hidden; transition: transform .38s ease, opacity .3s ease; }
+  .slip.show{ transform: scaleY(1); opacity:1; height:auto; padding:18px 20px; }
+  .slip .job-name{ font-family: var(--font-head); font-size:1.25rem; margin:6px 0 8px; }
+  .slip .job-note{ font-size:.84rem; color:var(--ink-soft); margin-top:6px; }
+  .stamp-mark{ display:inline-block; border:2px solid var(--stamp); color:var(--stamp); font-weight:800;
+    font-size:.72rem; padding:3px 10px; border-radius:6px; transform: rotate(-6deg); letter-spacing:.08em; }
+
+  .job-remain-list{ display:grid; grid-template-columns: repeat(auto-fill,minmax(190px,1fr)); gap:8px; margin-top:26px; text-align:left; }
+  .job-remain{ border:1px solid var(--line); border-radius:8px; padding:8px 10px; font-size:.76rem; background:var(--paper); }
+  .job-remain .jr-name{ font-weight:700; display:block; margin-bottom:3px; }
+  .job-remain .jr-count{ font-family: var(--font-num); font-variant-numeric: tabular-nums; color:var(--ink-soft); }
+  .job-remain.empty{ opacity:.42; text-decoration: line-through; }
+
+  .result-toolbar{ display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:14px; }
+  .result-table td.col-note{ color:var(--ink-soft); font-size:.8rem; }
+  .foot-note{ text-align:center; font-size:.78rem; color:var(--ink-soft); margin-top:34px; }
+  .print-meta{ display:none; }
+
+  @media print{
+    .stepper, .btn-row, .draw-controls-top, #panel-setup, #panel-draw, .no-print{ display:none !important; }
+    .sweep-app{ max-width:none; padding:0; }
+    #panel-result{ display:block !important; }
+    .card{ box-shadow:none; border:none; }
+    body{ background:#fff; }
+    .print-meta{ display:block; font-size:.85rem; color:#444; margin-bottom:10px; }
+  }
+</style>
+
+<div class="sweep-app">
+  <header class="hero">
+    <p class="eyebrow">班級掃地工作分配</p>
+    <h1>掃地工作抽籤</h1>
+    <p class="sub">教室內外、5F團體輔導室、通達樓5F女廁 — 每項工作單一負責人，全班抽籤決定，公平公正、責任分明。</p>
+  </header>
+
+  <nav class="stepper" role="tablist">
+    <button class="step-btn active" data-step="setup" type="button">1・設定名單與工作</button>
+    <button class="step-btn" data-step="draw" type="button">2・抽籤</button>
+    <button class="step-btn" data-step="result" type="button">3・結果</button>
+  </nav>
+
+  <main>
+    <!-- SETUP -->
+    <section id="panel-setup" class="panel active">
+      <div class="grid-2">
+        <div class="card">
+          <label class="field-label">班級名單（一行一位，可用座號或姓名）</label>
+          <p class="hint">有同學轉學、座號不連續也沒關係，直接刪掉那一行，或用下面的產生器排除特定號碼。</p>
+          <div class="seatgen">
+            <div class="mini">起始座號<input type="number" id="seatFrom" value="1" min="1"></div>
+            <div class="mini">結束座號<input type="number" id="seatTo" value="33" min="1"></div>
+            <div class="mini">扣除座號（逗號分隔，如轉學生）<input type="text" class="wide" id="seatExclude" placeholder="例：09, 17"></div>
+            <button class="btn btn-wood btn-sm" id="genSeatBtn" type="button">產生名單</button>
+          </div>
+          <textarea id="studentInput"></textarea>
+        </div>
+        <div class="card">
+          <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;">
+            <label class="field-label" style="margin-bottom:0;">工作清單（每項工作預設 1 人，責任獨立、無法互推）</label>
+            <button class="btn btn-wood btn-sm" id="addJobBtn" type="button">＋ 新增工作</button>
+          </div>
+          <p class="hint">「頻率」「負責幹部」只是標籤與列印用，不影響抽籤；請確認「工作總人數」與「全班人數」相符再開始抽籤。</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th style="min-width:170px;">工作名稱</th>
+                  <th style="min-width:120px;">分區</th>
+                  <th style="min-width:90px;">頻率</th>
+                  <th>人數</th>
+                  <th style="min-width:100px;">負責幹部</th>
+                  <th style="min-width:140px;">備註</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="jobTableBody"></tbody>
+            </table>
+          </div>
+          <div id="setupBanner"></div>
+          <div class="btn-row">
+            <button class="btn btn-stamp" id="startDrawBtn" type="button">開始抽籤 →</button>
+            <button class="btn btn-ghost btn-sm" id="exportConfigBtn" type="button">匯出設定 (JSON)</button>
+            <button class="btn btn-ghost btn-sm" id="importConfigBtn" type="button">匯入設定 (JSON)</button>
+            <input type="file" id="importConfigInput" accept="application/json" style="display:none">
+            <button class="btn btn-ghost btn-sm" id="resetAllBtn" type="button">全部清除重設</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- DRAW -->
+    <section id="panel-draw" class="panel">
+      <div class="card draw-stage">
+        <div class="draw-controls-top">
+          <label for="animStyleSel">抽籤動畫風格</label>
+          <select id="animStyleSel">
+            <option value="tube">籤筒抽籤</option>
+            <option value="wheel">轉盤抽籤</option>
+            <option value="slot">老虎機</option>
+          </select>
+        </div>
+        <p class="turn-label" id="roundLabel">第 1 輪抽籤</p>
+        <div class="progress-track"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+        <p class="turn-label" id="turnHint">請這位同學上前抽籤</p>
+        <h2 class="turn-name" id="turnName">—</h2>
+
+        <div class="anim-stage">
+          <div class="tube-wrap" id="tubeWrap">
+            <div class="tube"></div>
+            <div class="stick"></div><div class="stick"></div><div class="stick"></div><div class="stick"></div>
+          </div>
+          <div class="wheel-wrap" id="wheelWrap" style="display:none;">
+            <div class="wheel-pointer"></div>
+            <div class="wheel" id="wheelEl"></div>
+            <div class="wheel-hub"></div>
+          </div>
+          <div class="slot-wrap" id="slotWrap" style="display:none;">
+            <div class="slot-track" id="slotTrack"></div>
+          </div>
+        </div>
+
+        <div class="btn-row center">
+          <button class="btn btn-stamp" id="drawBtn" type="button">抽籤！</button>
+          <button class="btn btn-wood" id="nextBtn" type="button" disabled>下一位 →</button>
+        </div>
+
+        <div class="slip" id="slip">
+          <span class="stamp-mark">已抽籤</span>
+          <p class="job-name" id="slipJobName"></p>
+          <p class="zonechip" id="slipZone"></p>
+          <p class="job-note" id="slipNote"></p>
+        </div>
+
+        <div class="btn-row center no-print" style="border-top:1px solid var(--line); padding-top:14px; margin-top:24px;">
+          <button class="btn btn-ghost btn-sm" id="autoFinishBtn" type="button">剩餘全部自動抽完</button>
+          <button class="btn btn-ghost btn-sm" id="backSetupBtn" type="button">← 回設定</button>
+        </div>
+
+        <div class="job-remain-list" id="jobRemainList"></div>
+      </div>
+    </section>
+
+    <!-- RESULT -->
+    <section id="panel-result" class="panel">
+      <div class="card">
+        <div class="print-meta" id="printMeta"></div>
+        <div class="result-toolbar">
+          <h2 id="resultTitle">分配結果</h2>
+          <div class="btn-row" style="margin-top:0;">
+            <label style="font-size:.8rem; color:var(--ink-soft); display:flex; align-items:center; gap:6px;">
+              列印範圍
+              <select id="managerFilter"><option value="all">全部</option></select>
+            </label>
+            <button class="btn btn-wood btn-sm" id="sortByStudentBtn" type="button">依座號排序</button>
+            <button class="btn btn-wood btn-sm" id="sortByJobBtn" type="button">依工作排序</button>
+            <button class="btn btn-ghost btn-sm" id="printBtn" type="button">列印</button>
+            <button class="btn btn-ghost btn-sm" id="csvBtn" type="button">匯出 CSV</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="result-table">
+            <thead><tr><th>座號 / 姓名</th><th>分配工作</th><th>分區</th><th>負責幹部</th><th>備註</th></tr></thead>
+            <tbody id="resultTableBody"></tbody>
+          </table>
+        </div>
+        <div class="btn-row no-print">
+          <label style="display:flex; align-items:center; gap:6px; font-size:.85rem; color:var(--ink-soft);">
+            <input type="checkbox" id="avoidRepeatChk"> 下一輪盡量避免抽到跟這輪一樣的工作
+          </label>
+        </div>
+        <div class="btn-row no-print">
+          <button class="btn btn-stamp" id="nextRoundBtn" type="button">進行下一輪抽籤（換工作）</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="foot-note">
+    使用瀏覽器安全亂數（crypto.getRandomValues）抽籤，動畫風格只是視覺效果、不影響抽籤結果本身。<br>
+    團輔室工作需先向設備組登記借用鑰匙；外走廊每日需清潔，通達樓5F女廁請依衛生組規定用品清潔。<br>
+    所有資料只存在這台裝置的瀏覽器（localStorage），建議定期用「匯出設定」「匯出CSV」備份。
+  </footer>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  var STORAGE_KEY = "sweepLotteryState_v3";
+
+  function defaultJobs(){
+    return [
+      // 教室內部 — 衛生股長
+      {id:'a1', zone:'教室內部', name:'教室內前半掃地', freq:'daily', count:1, manager:'衛生股長', note:''},
+      {id:'a2', zone:'教室內部', name:'教室內後半掃地', freq:'daily', count:1, manager:'衛生股長', note:''},
+      {id:'a3', zone:'教室內部', name:'教室內拖地（全）', freq:'daily', count:1, manager:'衛生股長', note:''},
+      {id:'a4', zone:'教室內部', name:'右側窗戶（全）', freq:'daily', count:1, manager:'衛生股長', note:''},
+      {id:'a5', zone:'教室內部', name:'左側窗戶（全）', freq:'daily', count:1, manager:'衛生股長', note:''},
+      {id:'a6', zone:'教室內部', name:'講桌＋大黑板＋小黑板清潔', freq:'daily', count:1, manager:'衛生股長', note:''},
+      {id:'a7', zone:'教室內部', name:'佈告欄整理＋擦門＋窗台＋電器設備', freq:'daily', count:1, manager:'衛生股長', note:''},
+      {id:'a8', zone:'教室內部', name:'倒一般垃圾', freq:'daily', count:1, manager:'衛生股長', note:''},
+      {id:'a9', zone:'教室內部', name:'倒紙類回收', freq:'daily', count:1, manager:'衛生股長', note:''},
+      {id:'a10', zone:'教室內部', name:'倒紙容器回收', freq:'daily', count:1, manager:'衛生股長', note:''},
+      {id:'a11', zone:'教室內部', name:'倒廚餘＋其他回收', freq:'daily', count:1, manager:'衛生股長', note:''},
+      {id:'a12', zone:'教室內部', name:'電風扇＋日光燈除塵', freq:'daily', count:1, manager:'衛生股長', note:''},
+      {id:'a13', zone:'教室內部', name:'掃具整理歸位＋拖把清洗', freq:'daily', count:1, manager:'衛生股長', note:''},
+      // 教室外走廊 — 衛生股長
+      {id:'b1', zone:'教室外走廊', name:'右側走廊掃地', freq:'daily', count:1, manager:'衛生股長', note:''},
+      {id:'b2', zone:'教室外走廊', name:'右側走廊拖地', freq:'daily', count:1, manager:'衛生股長', note:''},
+      {id:'b3', zone:'教室外走廊', name:'右側走廊洗手台清理', freq:'daily', count:1, manager:'衛生股長', note:''},
+      {id:'b4', zone:'教室外走廊', name:'左側走廊掃地＋清理掃具櫃', freq:'daily', count:1, manager:'衛生股長', note:''},
+      {id:'b5', zone:'教室外走廊', name:'左側走廊拖地', freq:'daily', count:1, manager:'衛生股長', note:''},
+      {id:'b6', zone:'教室外走廊', name:'側廊置物櫃・飲水機・消防栓清潔', freq:'daily', count:1, manager:'衛生股長', note:''},
+      // 5F團體輔導室 — 衛生幹事
+      {id:'c1', zone:'5F團體輔導室', name:'團輔室地板掃拖', freq:'x3', count:1, manager:'衛生幹事', note:''},
+      {id:'c2', zone:'5F團體輔導室', name:'團輔室桌椅・教具整理', freq:'x3', count:1, manager:'衛生幹事', note:''},
+      {id:'c3', zone:'5F團體輔導室', name:'團輔室垃圾清運＋門窗', freq:'x3', count:1, manager:'衛生幹事', note:''},
+      {id:'c4', zone:'5F團體輔導室', name:'鑰匙借還登記（設備組）', freq:'x3', count:1, manager:'衛生幹事', note:'需先向設備組借用鑰匙，打掃完畢歸還'},
+      // 通達樓5F女廁 — 衛生幹事
+      {id:'d1', zone:'通達樓5F女廁', name:'洗手台1（含鏡面）清潔', freq:'daily', count:1, manager:'衛生幹事', note:''},
+      {id:'d2', zone:'通達樓5F女廁', name:'洗手台2（含鏡面）清潔', freq:'daily', count:1, manager:'衛生幹事', note:''},
+      {id:'d3', zone:'通達樓5F女廁', name:'公共地面掃地', freq:'daily', count:1, manager:'衛生幹事', note:''},
+      {id:'d4', zone:'通達樓5F女廁', name:'公共地面拖地', freq:'daily', count:1, manager:'衛生幹事', note:''},
+      {id:'d5', zone:'通達樓5F女廁', name:'廁間1、2（整間含地板）＋倒垃圾', freq:'daily', count:1, manager:'衛生幹事', note:'隔間編號請依現場實際調整'},
+      {id:'d6', zone:'通達樓5F女廁', name:'廁間3、4（整間含地板）＋倒垃圾', freq:'daily', count:1, manager:'衛生幹事', note:'隔間編號請依現場實際調整'},
+      {id:'d7', zone:'通達樓5F女廁', name:'廁間5、6（整間含地板）＋倒垃圾', freq:'daily', count:1, manager:'衛生幹事', note:'隔間編號請依現場實際調整'},
+      {id:'d8', zone:'通達樓5F女廁', name:'窗戶・排風扇除塵', freq:'daily', count:1, manager:'衛生幹事', note:''},
+      {id:'d9', zone:'通達樓5F女廁', name:'垃圾／回收清運至集中點', freq:'daily', count:1, manager:'衛生幹事', note:''},
+      {id:'d10', zone:'通達樓5F女廁', name:'清潔用具整理＋消毒用品補充', freq:'daily', count:1, manager:'衛生幹事', note:''}
+    ];
+  }
+  function defaultStudents(){
+    var arr = []; for(var i=1;i<=33;i++){ arr.push((i<10?'0':'')+i); } return arr;
+  }
+  function freshState(){
+    return { students: defaultStudents(), jobs: defaultJobs(), assignments:{}, round:1, history:[], avoidRepeat:false, started:false, animStyle:'tube' };
+  }
+  var state = load() || freshState();
+  if(!state.animStyle) state.animStyle = 'tube';
+
+  function load(){ try{ var raw = localStorage.getItem(STORAGE_KEY); return raw? JSON.parse(raw): null; }catch(e){ return null; } }
+  function save(){ try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }catch(e){} }
+
+  var freqLabel = { daily:'每日', x3:'每週≥3次', flex:'彈性' };
+  var zoneColorMap = { '教室內部':'z-board', '教室外走廊':'z-wood', '5F團體輔導室':'z-stamp', '通達樓5F女廁':'z-slate' };
+  var hashPalette = ['z-board','z-wood','z-stamp','z-slate','z-gold','z-teal'];
+  var cssVarByClass = { 'z-board':'var(--board)','z-wood':'var(--wood)','z-stamp':'var(--stamp)','z-slate':'var(--slate)','z-gold':'var(--gold)','z-teal':'var(--teal)' };
+  function zoneClass(zone){
+    if(zoneColorMap[zone]) return zoneColorMap[zone];
+    var h=0; for(var i=0;i<zone.length;i++){ h = (h*31 + zone.charCodeAt(i)) >>> 0; }
+    return hashPalette[h % hashPalette.length];
+  }
+  function zoneCssVar(zone){ return cssVarByClass[zoneClass(zone)]; }
+  function escapeHtml(s){ return String(s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+
+  // ---------- navigation ----------
+  var steps = ['setup','draw','result'];
+  function goStep(step){
+    steps.forEach(function(s){
+      document.getElementById('panel-'+s).classList.toggle('active', s===step);
+      document.querySelector('.step-btn[data-step="'+s+'"]').classList.toggle('active', s===step);
+    });
+    if(step==='draw') renderDraw();
+    if(step==='result') renderResult();
+  }
+  document.querySelectorAll('.step-btn').forEach(function(btn){
+    btn.addEventListener('click', function(){ goStep(btn.getAttribute('data-step')); });
+  });
+
+  // ---------- seat generator ----------
+  document.getElementById('genSeatBtn').addEventListener('click', function(){
+    var from = parseInt(document.getElementById('seatFrom').value||'1',10);
+    var to = parseInt(document.getElementById('seatTo').value||'1',10);
+    var excludeRaw = document.getElementById('seatExclude').value||'';
+    var exclude = excludeRaw.split(/[,，、\s]+/).map(function(s){ return s.trim(); }).filter(Boolean);
+    var excludeNums = exclude.map(function(s){ return parseInt(s,10); }).filter(function(n){ return !isNaN(n); });
+    if(state.students.length && !confirm('這會覆蓋目前的班級名單，確定嗎？')) return;
+    var arr = [];
+    for(var i=from;i<=to;i++){
+      if(excludeNums.indexOf(i) !== -1) continue;
+      arr.push((i<10?'0':'')+i);
+    }
+    state.students = arr;
+    studentInput.value = arr.join('\n');
+    save(); renderSetupBanner();
+  });
+
+  // ---------- setup rendering ----------
+  var studentInput = document.getElementById('studentInput');
+  studentInput.value = state.students.join('\n');
+  studentInput.addEventListener('input', function(){
+    state.students = studentInput.value.split('\n').map(function(s){ return s.trim(); }).filter(Boolean);
+    save(); renderSetupBanner();
+  });
+
+  var jobTableBody = document.getElementById('jobTableBody');
+  var dl = document.createElement('datalist'); dl.id='zoneOptions';
+  ['教室內部','教室外走廊','5F團體輔導室','通達樓5F女廁'].forEach(function(z){ var o=document.createElement('option'); o.value=z; dl.appendChild(o); });
+  var dlMgr = document.createElement('datalist'); dlMgr.id='managerOptions';
+  ['衛生股長','衛生幹事'].forEach(function(m){ var o=document.createElement('option'); o.value=m; dlMgr.appendChild(o); });
+  document.body.appendChild(dl); document.body.appendChild(dlMgr);
+
+  function renderJobTable(){
+    jobTableBody.innerHTML = '';
+    state.jobs.forEach(function(job, idx){
+      var tr = document.createElement('tr');
+
+      var tdName = document.createElement('td');
+      var inName = document.createElement('input'); inName.type='text'; inName.value=job.name;
+      inName.addEventListener('input', function(){ job.name = inName.value; save(); });
+      tdName.appendChild(inName); tr.appendChild(tdName);
+
+      var tdZone = document.createElement('td');
+      var inZone = document.createElement('input'); inZone.type='text'; inZone.value=job.zone; inZone.setAttribute('list','zoneOptions');
+      inZone.addEventListener('input', function(){ job.zone = inZone.value; save(); });
+      tdZone.appendChild(inZone); tr.appendChild(tdZone);
+
+      var tdFreq = document.createElement('td');
+      var selFreq = document.createElement('select');
+      ['daily','x3','flex'].forEach(function(f){
+        var opt=document.createElement('option'); opt.value=f; opt.textContent=freqLabel[f];
+        if(job.freq===f) opt.selected=true; selFreq.appendChild(opt);
+      });
+      selFreq.addEventListener('change', function(){ job.freq = selFreq.value; save(); });
+      tdFreq.appendChild(selFreq); tr.appendChild(tdFreq);
+
+      var tdCount = document.createElement('td'); tdCount.className='col-count';
+      var inCount = document.createElement('input'); inCount.type='number'; inCount.min='0'; inCount.value=job.count;
+      inCount.addEventListener('input', function(){ job.count = Math.max(0, parseInt(inCount.value||'0',10)); save(); renderSetupBanner(); });
+      tdCount.appendChild(inCount); tr.appendChild(tdCount);
+
+      var tdMgr = document.createElement('td');
+      var inMgr = document.createElement('input'); inMgr.type='text'; inMgr.value=job.manager||''; inMgr.setAttribute('list','managerOptions');
+      inMgr.addEventListener('input', function(){ job.manager = inMgr.value; save(); });
+      tdMgr.appendChild(inMgr); tr.appendChild(tdMgr);
+
+      var tdNote = document.createElement('td');
+      var inNote = document.createElement('input'); inNote.type='text'; inNote.value=job.note;
+      inNote.addEventListener('input', function(){ job.note = inNote.value; save(); });
+      tdNote.appendChild(inNote); tr.appendChild(tdNote);
+
+      var tdDel = document.createElement('td');
+      var delBtn = document.createElement('button'); delBtn.className='btn btn-ghost btn-sm'; delBtn.type='button'; delBtn.textContent='刪除';
+      delBtn.addEventListener('click', function(){ state.jobs.splice(idx,1); save(); renderJobTable(); renderSetupBanner(); });
+      tdDel.appendChild(delBtn); tr.appendChild(tdDel);
+
+      jobTableBody.appendChild(tr);
+    });
+  }
+
+  document.getElementById('addJobBtn').addEventListener('click', function(){
+    state.jobs.push({ id:'job'+Date.now(), zone:'教室內部', name:'新工作', freq:'daily', count:1, manager:'衛生股長', note:'' });
+    save(); renderJobTable(); renderSetupBanner();
+  });
+
+  function totalJobCount(){ return state.jobs.reduce(function(sum,j){ return sum+(j.count||0); },0); }
+  function renderSetupBanner(){
+    var banner = document.getElementById('setupBanner');
+    var total = totalJobCount(), students = state.students.length;
+    var ok = total === students && students > 0;
+    banner.innerHTML = '';
+    var div = document.createElement('div');
+    div.className = 'banner ' + (ok ? 'ok' : 'warn');
+    div.textContent = ok
+      ? ('✓ 工作總人數 ' + total + ' ／ 全班人數 ' + students + '，人數相符，可以開始抽籤')
+      : ('工作總人數 ' + total + ' ／ 全班人數 ' + students + '　— 請調整人數使兩者相等');
+    banner.appendChild(div);
+    document.getElementById('startDrawBtn').disabled = !ok;
+  }
+
+  document.getElementById('startDrawBtn').addEventListener('click', function(){
+    if(totalJobCount() !== state.students.length || state.students.length===0) return;
+    state.started = true; save(); goStep('draw');
+  });
+
+  document.getElementById('resetAllBtn').addEventListener('click', function(){
+    if(!confirm('確定要清除所有名單、工作設定與抽籤結果，回到預設值嗎？')) return;
+    state = freshState();
+    studentInput.value = state.students.join('\n');
+    save(); renderJobTable(); renderSetupBanner(); goStep('setup');
+  });
+
+  document.getElementById('exportConfigBtn').addEventListener('click', function(){
+    var payload = { students: state.students, jobs: state.jobs, animStyle: state.animStyle };
+    var blob = new Blob(['﻿'+JSON.stringify(payload,null,2)], {type:'application/json;charset=utf-8;'});
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a'); a.href=url; a.download='掃地工作設定.json';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+  });
+  document.getElementById('importConfigBtn').addEventListener('click', function(){
+    document.getElementById('importConfigInput').click();
+  });
+  document.getElementById('importConfigInput').addEventListener('change', function(e){
+    var file = e.target.files[0]; if(!file) return;
+    var reader = new FileReader();
+    reader.onload = function(){
+      try{
+        var data = JSON.parse(String(reader.result).replace(/^﻿/,''));
+        if(!confirm('匯入後將覆蓋目前的名單與工作清單，確定嗎？')) return;
+        if(Array.isArray(data.students)) state.students = data.students;
+        if(Array.isArray(data.jobs)) state.jobs = data.jobs;
+        if(data.animStyle) state.animStyle = data.animStyle;
+        studentInput.value = state.students.join('\n');
+        save(); renderJobTable(); renderSetupBanner();
+      }catch(err){ alert('這個檔案格式讀不了，請確認是從「匯出設定」下載的 JSON 檔。'); }
+    };
+    reader.readAsText(file, 'utf-8');
+    e.target.value = '';
+  });
+
+  // ---------- draw logic ----------
+  function assignedCountFor(jobId){ var c=0; for(var k in state.assignments){ if(state.assignments[k]===jobId) c++; } return c; }
+  function remainingFor(job){ return job.count - assignedCountFor(job.id); }
+  function buildPool(excludeJobId){
+    var pool = [];
+    state.jobs.forEach(function(job){
+      if(job.id===excludeJobId) return;
+      var r = remainingFor(job);
+      for(var i=0;i<r;i++) pool.push(job.id);
+    });
+    return pool;
+  }
+  function randomIndex(max){
+    if(max<=0) return 0;
+    var arr = new Uint32Array(1); crypto.getRandomValues(arr); return arr[0] % max;
+  }
+  function jobById(id){ return state.jobs.filter(function(j){ return j.id===id; })[0]; }
+  function nextUnassignedIndex(){
+    for(var i=0;i<state.students.length;i++){ if(!(state.students[i] in state.assignments)) return i; }
+    return -1;
+  }
+
+  var drawing = false;
+  var wheelTotalRotation = 0;
+
+  document.getElementById('animStyleSel').value = state.animStyle;
+  document.getElementById('animStyleSel').addEventListener('change', function(e){
+    state.animStyle = e.target.value; save(); applyAnimVisibility(); if(state.animStyle==='wheel') buildWheelGradient();
+  });
+  function applyAnimVisibility(){
+    document.getElementById('tubeWrap').style.display = state.animStyle==='tube' ? '' : 'none';
+    document.getElementById('wheelWrap').style.display = state.animStyle==='wheel' ? '' : 'none';
+    document.getElementById('slotWrap').style.display = state.animStyle==='slot' ? '' : 'none';
+  }
+
+  function renderDraw(){
+    applyAnimVisibility();
+    if(state.animStyle==='wheel') buildWheelGradient();
+    var idx = nextUnassignedIndex();
+    var total = state.students.length, doneCount = Object.keys(state.assignments).length;
+    document.getElementById('roundLabel').textContent = '第 ' + state.round + ' 輪抽籤　（已完成 ' + doneCount + ' / ' + total + '）';
+    document.getElementById('progressFill').style.width = (total? (doneCount/total*100):0) + '%';
+    document.getElementById('slip').classList.remove('show');
+    document.getElementById('nextBtn').disabled = true;
+    document.getElementById('drawBtn').disabled = false;
+    if(idx === -1){
+      document.getElementById('turnHint').textContent = '本輪已全部抽完！';
+      document.getElementById('turnName').textContent = '🎉 前往「結果」查看名單';
+      document.getElementById('drawBtn').disabled = true;
+    } else {
+      document.getElementById('turnHint').textContent = '請這位同學上前抽籤';
+      document.getElementById('turnName').textContent = state.students[idx];
+    }
+    renderJobRemainList();
+  }
+  function renderJobRemainList(){
+    var wrap = document.getElementById('jobRemainList'); wrap.innerHTML = '';
+    state.jobs.forEach(function(job){
+      var r = remainingFor(job);
+      var el = document.createElement('div'); el.className = 'job-remain' + (r<=0 ? ' empty':'');
+      el.innerHTML = '<span class="jr-name">'+escapeHtml(job.name)+'</span><span class="jr-count">剩 '+Math.max(r,0)+' / '+job.count+'</span>';
+      wrap.appendChild(el);
+    });
+  }
+
+  function buildWheelGradient(){
+    var wheel = document.getElementById('wheelEl');
+    var segs = [];
+    state.jobs.forEach(function(job){ var r = remainingFor(job); if(r>0) segs.push({job:job, count:r}); });
+    var totalCount = segs.reduce(function(s,x){ return s+x.count; },0);
+    if(totalCount===0){ wheel.style.background = 'var(--paper)'; return []; }
+    var acc = 0; var stops = []; var ranges = [];
+    segs.forEach(function(s,i){
+      var startPct = acc/totalCount*100;
+      acc += s.count;
+      var endPct = acc/totalCount*100;
+      var color = zoneCssVar(s.job.zone);
+      stops.push(color+' '+startPct.toFixed(3)+'% '+endPct.toFixed(3)+'%');
+      ranges.push({ jobId: s.job.id, startDeg: startPct*3.6, endDeg: endPct*3.6 });
+    });
+    wheel.style.background = 'conic-gradient(from 0deg, '+stops.join(', ')+')';
+    wheel._ranges = ranges;
+    return ranges;
+  }
+
+  function performDraw(){
+    if(drawing) return;
+    var idx = nextUnassignedIndex(); if(idx === -1) return;
+    var studentName = state.students[idx];
+    var excludeJobId = null;
+    if(state.avoidRepeat && state.history.length){
+      var prev = state.history[state.history.length-1];
+      if(prev && prev[studentName]) excludeJobId = prev[studentName];
+    }
+    var pool = buildPool(excludeJobId);
+    if(pool.length===0) pool = buildPool(null);
+    if(pool.length===0) return;
+    var chosenId = pool[randomIndex(pool.length)];
+
+    drawing = true;
+    document.getElementById('drawBtn').disabled = true;
+
+    function reveal(){
+      state.assignments[studentName] = chosenId; save();
+      var job = jobById(chosenId);
+      document.getElementById('slipJobName').textContent = job.name;
+      document.getElementById('slipZone').innerHTML = '<span class="dot '+zoneClass(job.zone)+'"></span>'+escapeHtml(job.zone)+' <span class="chip badge-'+job.freq+'">'+freqLabel[job.freq]+'</span>';
+      document.getElementById('slipNote').textContent = job.note || '';
+      document.getElementById('slip').classList.add('show');
+      document.getElementById('nextBtn').disabled = false;
+      renderJobRemainList();
+      var total = state.students.length, doneCount = Object.keys(state.assignments).length;
+      document.getElementById('roundLabel').textContent = '第 ' + state.round + ' 輪抽籤　（已完成 ' + doneCount + ' / ' + total + '）';
+      document.getElementById('progressFill').style.width = (total? (doneCount/total*100):0) + '%';
+      drawing = false;
+    }
+
+    if(state.animStyle === 'wheel'){ animateWheel(chosenId, reveal); }
+    else if(state.animStyle === 'slot'){ animateSlot(chosenId, reveal); }
+    else { animateTube(reveal); }
+  }
+
+  function animateTube(cb){
+    var tubeWrap = document.getElementById('tubeWrap');
+    var sticks = tubeWrap.querySelectorAll('.stick');
+    var stick = sticks[randomIndex(sticks.length)];
+    stick.classList.add('active'); tubeWrap.classList.add('drawing');
+    setTimeout(function(){ tubeWrap.classList.remove('drawing'); stick.classList.remove('active'); cb(); }, 550);
+  }
+
+  function animateWheel(chosenId, cb){
+    var ranges = buildWheelGradient();
+    var range = ranges.filter(function(r){ return r.jobId===chosenId; })[0];
+    if(!range){ cb(); return; }
+    var span = range.endDeg - range.startDeg;
+    var pad = Math.min(span*0.25, 3);
+    var targetDeg = range.startDeg + pad + Math.random()*Math.max(span-2*pad,0.001);
+    var currentMod = wheelTotalRotation % 360;
+    var needed = ((360 - targetDeg) - currentMod + 360) % 360;
+    var delta = needed + 4*360;
+    wheelTotalRotation += delta;
+    var wheel = document.getElementById('wheelEl');
+    wheel.style.transform = 'rotate('+wheelTotalRotation+'deg)';
+    var done = false;
+    function finish(){ if(done) return; done=true; wheel.removeEventListener('transitionend', finish); cb(); }
+    wheel.addEventListener('transitionend', finish);
+    setTimeout(finish, 2500);
+  }
+
+  function animateSlot(chosenId, cb){
+    var track = document.getElementById('slotTrack');
+    var remainingJobs = state.jobs.filter(function(j){ return remainingFor(j) > 0; });
+    if(remainingJobs.length===0) remainingJobs = [jobById(chosenId)];
+    var reelLen = 22;
+    var items = [];
+    for(var i=0;i<reelLen;i++){ items.push(remainingJobs[randomIndex(remainingJobs.length)]); }
+    items.push(jobById(chosenId));
+    track.style.transition = 'none';
+    track.style.transform = 'translateY(0px)';
+    track.innerHTML = items.map(function(j){ return '<div class="slot-item">'+escapeHtml(j.name)+'</div>'; }).join('');
+    var rowH = 76;
+    void track.offsetHeight; // reflow
+    requestAnimationFrame(function(){
+      track.style.transition = 'transform 1.5s cubic-bezier(.1,.7,.15,1)';
+      track.style.transform = 'translateY(-'+(rowH*(items.length-1))+'px)';
+    });
+    var done=false;
+    function finish(){ if(done) return; done=true; track.removeEventListener('transitionend', finish); cb(); }
+    track.addEventListener('transitionend', finish);
+    setTimeout(finish, 1650);
+  }
+
+  document.getElementById('drawBtn').addEventListener('click', performDraw);
+  document.getElementById('nextBtn').addEventListener('click', function(){ renderDraw(); });
+
+  document.getElementById('autoFinishBtn').addEventListener('click', function(){
+    if(!confirm('將直接為剩餘所有同學隨機抽完（不含動畫），確定嗎？')) return;
+    var idx;
+    while((idx = nextUnassignedIndex()) !== -1){
+      var studentName = state.students[idx];
+      var excludeJobId = null;
+      if(state.avoidRepeat && state.history.length){
+        var prev = state.history[state.history.length-1];
+        if(prev && prev[studentName]) excludeJobId = prev[studentName];
+      }
+      var pool = buildPool(excludeJobId);
+      if(pool.length===0) pool = buildPool(null);
+      if(pool.length===0) break;
+      state.assignments[studentName] = pool[randomIndex(pool.length)];
+    }
+    save(); goStep('result');
+  });
+
+  document.getElementById('backSetupBtn').addEventListener('click', function(){ goStep('setup'); });
+
+  // ---------- result ----------
+  var resultSort = 'student';
+  function distinctManagers(){
+    var set = {}; state.jobs.forEach(function(j){ var m = j.manager || '未指定'; set[m]=true; });
+    return Object.keys(set);
+  }
+  function renderResult(){
+    document.getElementById('resultTitle').textContent = '分配結果（第 ' + state.round + ' 輪）';
+
+    var mgrSel = document.getElementById('managerFilter');
+    var currentVal = mgrSel.value || 'all';
+    mgrSel.innerHTML = '<option value="all">全部</option>';
+    distinctManagers().forEach(function(m){
+      var o = document.createElement('option'); o.value = m; o.textContent = m; mgrSel.appendChild(o);
+    });
+    mgrSel.value = Array.prototype.some.call(mgrSel.options, function(o){ return o.value===currentVal; }) ? currentVal : 'all';
+
+    var rows = state.students.map(function(name){
+      var jobId = state.assignments[name];
+      var job = jobId ? jobById(jobId) : null;
+      return { name: name, job: job };
+    }).filter(function(r){
+      if(mgrSel.value==='all') return true;
+      var m = r.job ? (r.job.manager||'未指定') : '未指定';
+      return m === mgrSel.value;
+    });
+
+    if(resultSort === 'job'){
+      rows.sort(function(a,b){
+        var an = a.job ? a.job.name : '', bn = b.job ? b.job.name : '';
+        return an.localeCompare(bn, 'zh-Hant') || a.name.localeCompare(b.name,'zh-Hant');
+      });
+    } else {
+      rows.sort(function(a,b){ return a.name.localeCompare(b.name, 'zh-Hant', {numeric:true}); });
+    }
+
+    var body = document.getElementById('resultTableBody');
+    body.innerHTML = '';
+    var lastMgr = null;
+    var groupByManager = (mgrSel.value === 'all');
+    var sortedForGroup = rows;
+    if(groupByManager){
+      sortedForGroup = rows.slice().sort(function(a,b){
+        var ma = a.job? (a.job.manager||'未指定'):'未指定', mb = b.job? (b.job.manager||'未指定'):'未指定';
+        if(ma!==mb) return ma.localeCompare(mb,'zh-Hant');
+        if(resultSort==='job'){ var an=a.job?a.job.name:'', bn=b.job?b.job.name:''; return an.localeCompare(bn,'zh-Hant') || a.name.localeCompare(b.name,'zh-Hant'); }
+        return a.name.localeCompare(b.name,'zh-Hant',{numeric:true});
+      });
+    }
+    sortedForGroup.forEach(function(r){
+      var m = r.job ? (r.job.manager||'未指定') : '未指定';
+      if(groupByManager && m !== lastMgr){
+        var trh = document.createElement('tr'); trh.className='group-header';
+        var tdh = document.createElement('td'); tdh.colSpan=5; tdh.textContent = '負責幹部：'+m;
+        trh.appendChild(tdh); body.appendChild(trh); lastMgr = m;
+      }
+      var tr = document.createElement('tr');
+      var tdName = document.createElement('td'); tdName.textContent = r.name; tdName.style.fontFamily='var(--font-num)';
+      var tdJob = document.createElement('td'); tdJob.textContent = r.job ? r.job.name : '（尚未抽籤）';
+      var tdZone = document.createElement('td');
+      if(r.job){ tdZone.innerHTML = '<span class="zonechip"><span class="dot '+zoneClass(r.job.zone)+'"></span>'+escapeHtml(r.job.zone)+'</span>'; }
+      var tdMgr = document.createElement('td'); tdMgr.textContent = r.job ? (r.job.manager||'') : '';
+      var tdNote = document.createElement('td'); tdNote.className='col-note';
+      tdNote.textContent = r.job ? ((r.job.note||'') + (r.job.freq!=='flex' ? '　['+freqLabel[r.job.freq]+']' : '')) : '';
+      tr.appendChild(tdName); tr.appendChild(tdJob); tr.appendChild(tdZone); tr.appendChild(tdMgr); tr.appendChild(tdNote);
+      body.appendChild(tr);
+    });
+
+    document.getElementById('printMeta').textContent = '掃地工作分配表　第 '+state.round+' 輪　列印範圍：'+(mgrSel.value==='all'?'全部':mgrSel.value)+'　產出日期：'+new Date().toLocaleDateString('zh-TW');
+    document.getElementById('avoidRepeatChk').checked = !!state.avoidRepeat;
+    document.getElementById('nextRoundBtn').disabled = Object.keys(state.assignments).length < state.students.length;
+  }
+  document.getElementById('sortByStudentBtn').addEventListener('click', function(){ resultSort='student'; renderResult(); });
+  document.getElementById('sortByJobBtn').addEventListener('click', function(){ resultSort='job'; renderResult(); });
+  document.getElementById('avoidRepeatChk').addEventListener('change', function(e){ state.avoidRepeat = e.target.checked; save(); });
+  document.getElementById('managerFilter').addEventListener('change', renderResult);
+
+  document.getElementById('printBtn').addEventListener('click', function(){ window.print(); });
+
+  document.getElementById('csvBtn').addEventListener('click', function(){
+    var mgrSel = document.getElementById('managerFilter');
+    var lines = [['座號/姓名','分配工作','分區','頻率','負責幹部','備註'].join(',')];
+    state.students.forEach(function(name){
+      var jobId = state.assignments[name];
+      var job = jobId ? jobById(jobId) : null;
+      var mgr = job ? (job.manager||'') : '';
+      if(mgrSel.value!=='all' && mgr!==mgrSel.value) return;
+      var row = [name, job? job.name:'', job? job.zone:'', job? freqLabel[job.freq]:'', mgr, job? (job.note||'').replace(/,/g,'、'):''];
+      lines.push(row.map(function(v){ return '"'+String(v).replace(/"/g,'""')+'"'; }).join(','));
+    });
+    var csv = '﻿' + lines.join('\r\n');
+    var blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a'); a.href = url; a.download = '掃地工作分配表_第'+state.round+'輪.csv';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+  });
+
+  document.getElementById('nextRoundBtn').addEventListener('click', function(){
+    if(Object.keys(state.assignments).length < state.students.length) return;
+    if(!confirm('確定要開始下一輪抽籤嗎？這輪結果會保存為歷史紀錄，工作將重新分配。')) return;
+    state.history.push(Object.assign({}, state.assignments));
+    state.assignments = {};
+    state.round += 1;
+    save();
+    goStep('draw');
+  });
+
+  // ---------- init ----------
+  renderJobTable();
+  renderSetupBanner();
+})();
+</script>
+
+</body>
+</html>
