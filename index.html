@@ -237,13 +237,17 @@
             <button class="btn btn-wood btn-sm" id="genSeatBtn" type="button">產生名單</button>
           </div>
           <textarea id="studentInput"></textarea>
+
+          <label class="field-label" style="margin-top:16px;">不參與抽籤名單（老師直接指派工作，如班級幹部）</label>
+          <p class="hint">每行一位，格式「座號　工作說明」（說明可留空）。這些同學不會出現在抽籤隊伍裡，「工作總人數」的需求也會自動扣除他們，不用湊數。</p>
+          <textarea id="excludedInput" style="min-height:120px;" placeholder="例：01 班長，統籌督導不參與打掃"></textarea>
         </div>
         <div class="card">
           <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;">
             <label class="field-label" style="margin-bottom:0;">工作清單（每項工作預設 1 人，分工清楚）</label>
             <button class="btn btn-wood btn-sm" id="addJobBtn" type="button">＋ 新增工作</button>
           </div>
-          <p class="hint">「頻率」「負責幹部」只是標籤與列印用，不影響抽籤；請確認「工作總人數」與「全班人數」相符再開始抽籤。</p>
+          <p class="hint">「頻率」「負責幹部」只是標籤與列印用，不影響抽籤；請確認「工作總人數」與「需抽籤人數」（全班人數已扣除左側不參與抽籤名單）相符再開始抽籤。</p>
           <div class="table-wrap">
             <table>
               <thead>
@@ -417,13 +421,19 @@
   }
   var DEFAULT_ZONE_OPTIONS = ['教室內部','教室外走廊','5F團體輔導室','通達樓5F女廁'];
   var DEFAULT_MANAGER_OPTIONS = ['衛生股長','衛生幹事'];
+  var EXCLUDED_MANAGER_LABEL = '教師指派';
   function freshState(){
-    return { students: defaultStudents(), jobs: defaultJobs(), assignments:{}, round:1, history:[], avoidRepeat:false, started:false, animStyle:'tube', zoneOptions: DEFAULT_ZONE_OPTIONS.slice(), managerOptions: DEFAULT_MANAGER_OPTIONS.slice() };
+    return { students: defaultStudents(), jobs: defaultJobs(), excluded: [], assignments:{}, round:1, history:[], avoidRepeat:false, started:false, animStyle:'tube', zoneOptions: DEFAULT_ZONE_OPTIONS.slice(), managerOptions: DEFAULT_MANAGER_OPTIONS.slice() };
   }
   var state = load() || freshState();
   if(!state.animStyle) state.animStyle = 'tube';
   if(!state.zoneOptions) state.zoneOptions = DEFAULT_ZONE_OPTIONS.slice();
   if(!state.managerOptions) state.managerOptions = DEFAULT_MANAGER_OPTIONS.slice();
+  if(!Array.isArray(state.excluded)) state.excluded = [];
+
+  function isExcluded(seat){ return state.excluded.some(function(e){ return e.seat===seat; }); }
+  function excludedNote(seat){ var e = state.excluded.filter(function(x){ return x.seat===seat; })[0]; return e ? e.note : ''; }
+  function activeStudents(){ return state.students.filter(function(s){ return !isExcluded(s); }); }
   function effectiveZoneOptions(){
     var opts = state.zoneOptions.slice();
     state.jobs.forEach(function(j){ if(j.zone && opts.indexOf(j.zone)===-1) opts.push(j.zone); });
@@ -487,6 +497,20 @@
   studentInput.value = state.students.join('\n');
   studentInput.addEventListener('input', function(){
     state.students = studentInput.value.split('\n').map(function(s){ return s.trim(); }).filter(Boolean);
+    save(); renderSetupBanner();
+  });
+
+  function parseExcludedLine(line){
+    var m = line.match(/^([^\s:：,，]+)[\s:：,，]*(.*)$/);
+    if(!m) return null;
+    var seat = m[1].trim();
+    if(!seat) return null;
+    return { seat: seat, note: (m[2]||'').trim() };
+  }
+  var excludedInput = document.getElementById('excludedInput');
+  excludedInput.value = state.excluded.map(function(e){ return e.note ? (e.seat+' '+e.note) : e.seat; }).join('\n');
+  excludedInput.addEventListener('input', function(){
+    state.excluded = excludedInput.value.split('\n').map(parseExcludedLine).filter(Boolean);
     save(); renderSetupBanner();
   });
 
@@ -597,20 +621,21 @@
   function totalJobCount(){ return state.jobs.reduce(function(sum,j){ return sum+(j.count||0); },0); }
   function renderSetupBanner(){
     var banner = document.getElementById('setupBanner');
-    var total = totalJobCount(), students = state.students.length;
-    var ok = total === students && students > 0;
+    var total = totalJobCount(), needed = activeStudents().length, excludedCount = state.excluded.length;
+    var ok = total === needed && needed > 0;
     banner.innerHTML = '';
     var div = document.createElement('div');
     div.className = 'banner ' + (ok ? 'ok' : 'warn');
+    var excludedSuffix = excludedCount ? ('　（全班 '+state.students.length+' 人，已扣除 '+excludedCount+' 位教師指派）') : '';
     div.textContent = ok
-      ? ('✓ 工作總人數 ' + total + ' ／ 全班人數 ' + students + '，人數相符，可以開始抽籤')
-      : ('工作總人數 ' + total + ' ／ 全班人數 ' + students + '　— 請調整人數使兩者相等');
+      ? ('✓ 工作總人數 ' + total + ' ／ 需抽籤人數 ' + needed + '，人數相符，可以開始抽籤' + excludedSuffix)
+      : ('工作總人數 ' + total + ' ／ 需抽籤人數 ' + needed + '　— 請調整人數使兩者相等' + excludedSuffix);
     banner.appendChild(div);
     document.getElementById('startDrawBtn').disabled = !ok;
   }
 
   document.getElementById('startDrawBtn').addEventListener('click', function(){
-    if(totalJobCount() !== state.students.length || state.students.length===0) return;
+    if(totalJobCount() !== activeStudents().length || activeStudents().length===0) return;
     state.started = true; save(); goStep('draw');
   });
 
@@ -618,11 +643,12 @@
     if(!confirm('確定要清除所有名單、工作設定與抽籤結果，回到預設值嗎？')) return;
     state = freshState();
     studentInput.value = state.students.join('\n');
+    excludedInput.value = '';
     save(); renderJobTable(); renderSetupBanner(); goStep('setup');
   });
 
   document.getElementById('exportConfigBtn').addEventListener('click', function(){
-    var payload = { students: state.students, jobs: state.jobs, animStyle: state.animStyle, zoneOptions: state.zoneOptions, managerOptions: state.managerOptions };
+    var payload = { students: state.students, jobs: state.jobs, excluded: state.excluded, animStyle: state.animStyle, zoneOptions: state.zoneOptions, managerOptions: state.managerOptions };
     var blob = new Blob(['﻿'+JSON.stringify(payload,null,2)], {type:'application/json;charset=utf-8;'});
     var url = URL.createObjectURL(blob);
     var a = document.createElement('a'); a.href=url; a.download='掃地工作設定.json';
@@ -640,10 +666,12 @@
         if(!confirm('匯入後將覆蓋目前的名單與工作清單，確定嗎？')) return;
         if(Array.isArray(data.students)) state.students = data.students;
         if(Array.isArray(data.jobs)) state.jobs = data.jobs;
+        if(Array.isArray(data.excluded)) state.excluded = data.excluded;
         if(data.animStyle) state.animStyle = data.animStyle;
         if(Array.isArray(data.zoneOptions)) state.zoneOptions = data.zoneOptions;
         if(Array.isArray(data.managerOptions)) state.managerOptions = data.managerOptions;
         studentInput.value = state.students.join('\n');
+        excludedInput.value = state.excluded.map(function(e){ return e.note ? (e.seat+' '+e.note) : e.seat; }).join('\n');
         save(); renderJobTable(); renderSetupBanner();
       }catch(err){ alert('這個檔案格式讀不了，請確認是從「匯出設定」下載的 JSON 檔。'); }
     };
@@ -668,9 +696,10 @@
     var arr = new Uint32Array(1); crypto.getRandomValues(arr); return arr[0] % max;
   }
   function jobById(id){ return state.jobs.filter(function(j){ return j.id===id; })[0]; }
-  function nextUnassignedIndex(){
-    for(var i=0;i<state.students.length;i++){ if(!(state.students[i] in state.assignments)) return i; }
-    return -1;
+  function nextUnassignedStudent(){
+    var active = activeStudents();
+    for(var i=0;i<active.length;i++){ if(!(active[i] in state.assignments)) return active[i]; }
+    return null;
   }
 
   var drawing = false;
@@ -689,20 +718,20 @@
   function renderDraw(){
     applyAnimVisibility();
     if(state.animStyle==='wheel') buildWheelGradient();
-    var idx = nextUnassignedIndex();
-    var total = state.students.length, doneCount = Object.keys(state.assignments).length;
+    var nextName = nextUnassignedStudent();
+    var total = activeStudents().length, doneCount = Object.keys(state.assignments).length;
     document.getElementById('roundLabel').textContent = '第 ' + state.round + ' 輪抽籤　（已完成 ' + doneCount + ' / ' + total + '）';
     document.getElementById('progressFill').style.width = (total? (doneCount/total*100):0) + '%';
     document.getElementById('slip').classList.remove('show');
     document.getElementById('nextBtn').disabled = true;
     document.getElementById('drawBtn').disabled = false;
-    if(idx === -1){
+    if(nextName === null){
       document.getElementById('turnHint').textContent = '本輪已全部抽完！';
       document.getElementById('turnName').textContent = '🎉 前往「結果」查看名單';
       document.getElementById('drawBtn').disabled = true;
     } else {
       document.getElementById('turnHint').textContent = '請這位同學上前抽籤';
-      document.getElementById('turnName').textContent = state.students[idx];
+      document.getElementById('turnName').textContent = nextName;
     }
     renderJobRemainList();
   }
@@ -738,8 +767,7 @@
 
   function performDraw(){
     if(drawing) return;
-    var idx = nextUnassignedIndex(); if(idx === -1) return;
-    var studentName = state.students[idx];
+    var studentName = nextUnassignedStudent(); if(studentName === null) return;
     var excludeJobId = null;
     if(state.avoidRepeat && state.history.length){
       var prev = state.history[state.history.length-1];
@@ -762,7 +790,7 @@
       document.getElementById('slip').classList.add('show');
       document.getElementById('nextBtn').disabled = false;
       renderJobRemainList();
-      var total = state.students.length, doneCount = Object.keys(state.assignments).length;
+      var total = activeStudents().length, doneCount = Object.keys(state.assignments).length;
       document.getElementById('roundLabel').textContent = '第 ' + state.round + ' 輪抽籤　（已完成 ' + doneCount + ' / ' + total + '）';
       document.getElementById('progressFill').style.width = (total? (doneCount/total*100):0) + '%';
       drawing = false;
@@ -828,9 +856,8 @@
 
   document.getElementById('autoFinishBtn').addEventListener('click', function(){
     if(!confirm('將直接為剩餘所有同學隨機抽完（不含動畫），確定嗎？')) return;
-    var idx;
-    while((idx = nextUnassignedIndex()) !== -1){
-      var studentName = state.students[idx];
+    var studentName;
+    while((studentName = nextUnassignedStudent()) !== null){
       var excludeJobId = null;
       if(state.avoidRepeat && state.history.length){
         var prev = state.history[state.history.length-1];
@@ -850,6 +877,7 @@
   var resultSort = 'student';
   function distinctManagers(){
     var set = {}; state.jobs.forEach(function(j){ var m = j.manager || '未指定'; set[m]=true; });
+    if(state.excluded.length) set[EXCLUDED_MANAGER_LABEL] = true;
     return Object.keys(set);
   }
   function renderResult(){
@@ -864,20 +892,22 @@
     mgrSel.value = Array.prototype.some.call(mgrSel.options, function(o){ return o.value===currentVal; }) ? currentVal : 'all';
 
     var rows = state.students.map(function(name){
+      if(isExcluded(name)) return { name: name, excludedFlag: true, note: excludedNote(name) };
       var jobId = state.assignments[name];
       var job = jobId ? jobById(jobId) : null;
       return { name: name, job: job };
     }).filter(function(r){
       if(mgrSel.value==='all') return true;
+      if(r.excludedFlag) return mgrSel.value === EXCLUDED_MANAGER_LABEL;
       var m = r.job ? (r.job.manager||'未指定') : '未指定';
       return m === mgrSel.value;
     });
 
+    function rowManager(r){ return r.excludedFlag ? EXCLUDED_MANAGER_LABEL : (r.job ? (r.job.manager||'未指定') : '未指定'); }
+    function rowJobName(r){ return r.excludedFlag ? EXCLUDED_MANAGER_LABEL : (r.job ? r.job.name : ''); }
+
     if(resultSort === 'job'){
-      rows.sort(function(a,b){
-        var an = a.job ? a.job.name : '', bn = b.job ? b.job.name : '';
-        return an.localeCompare(bn, 'zh-Hant') || a.name.localeCompare(b.name,'zh-Hant');
-      });
+      rows.sort(function(a,b){ return rowJobName(a).localeCompare(rowJobName(b), 'zh-Hant') || a.name.localeCompare(b.name,'zh-Hant'); });
     } else {
       rows.sort(function(a,b){ return a.name.localeCompare(b.name, 'zh-Hant', {numeric:true}); });
     }
@@ -889,14 +919,14 @@
     var sortedForGroup = rows;
     if(groupByManager){
       sortedForGroup = rows.slice().sort(function(a,b){
-        var ma = a.job? (a.job.manager||'未指定'):'未指定', mb = b.job? (b.job.manager||'未指定'):'未指定';
+        var ma = rowManager(a), mb = rowManager(b);
         if(ma!==mb) return ma.localeCompare(mb,'zh-Hant');
-        if(resultSort==='job'){ var an=a.job?a.job.name:'', bn=b.job?b.job.name:''; return an.localeCompare(bn,'zh-Hant') || a.name.localeCompare(b.name,'zh-Hant'); }
+        if(resultSort==='job'){ return rowJobName(a).localeCompare(rowJobName(b),'zh-Hant') || a.name.localeCompare(b.name,'zh-Hant'); }
         return a.name.localeCompare(b.name,'zh-Hant',{numeric:true});
       });
     }
     sortedForGroup.forEach(function(r){
-      var m = r.job ? (r.job.manager||'未指定') : '未指定';
+      var m = rowManager(r);
       if(groupByManager && m !== lastMgr){
         var trh = document.createElement('tr'); trh.className='group-header';
         var tdh = document.createElement('td'); tdh.colSpan=5; tdh.textContent = '負責幹部：'+m;
@@ -904,19 +934,27 @@
       }
       var tr = document.createElement('tr');
       var tdName = document.createElement('td'); tdName.textContent = r.name; tdName.style.fontFamily='var(--font-num)';
-      var tdJob = document.createElement('td'); tdJob.textContent = r.job ? r.job.name : '（尚未抽籤）';
+      var tdJob = document.createElement('td');
       var tdZone = document.createElement('td');
-      if(r.job){ tdZone.innerHTML = '<span class="zonechip"><span class="dot '+zoneClass(r.job.zone)+'"></span>'+escapeHtml(r.job.zone)+'</span>'; }
-      var tdMgr = document.createElement('td'); tdMgr.textContent = r.job ? (r.job.manager||'') : '';
+      var tdMgr = document.createElement('td');
       var tdNote = document.createElement('td'); tdNote.className='col-note';
-      tdNote.textContent = r.job ? ((r.job.note||'') + (r.job.freq!=='flex' ? '　['+freqLabel[r.job.freq]+']' : '')) : '';
+      if(r.excludedFlag){
+        tdJob.innerHTML = '<span class="chip badge-flex">教師指派</span>';
+        tdMgr.textContent = EXCLUDED_MANAGER_LABEL;
+        tdNote.textContent = r.note || '';
+      } else {
+        tdJob.textContent = r.job ? r.job.name : '（尚未抽籤）';
+        if(r.job){ tdZone.innerHTML = '<span class="zonechip"><span class="dot '+zoneClass(r.job.zone)+'"></span>'+escapeHtml(r.job.zone)+'</span>'; }
+        tdMgr.textContent = r.job ? (r.job.manager||'') : '';
+        tdNote.textContent = r.job ? ((r.job.note||'') + (r.job.freq!=='flex' ? '　['+freqLabel[r.job.freq]+']' : '')) : '';
+      }
       tr.appendChild(tdName); tr.appendChild(tdJob); tr.appendChild(tdZone); tr.appendChild(tdMgr); tr.appendChild(tdNote);
       body.appendChild(tr);
     });
 
     document.getElementById('printMeta').textContent = '掃地工作分配表　第 '+state.round+' 輪　列印範圍：'+(mgrSel.value==='all'?'全部':mgrSel.value)+'　產出日期：'+new Date().toLocaleDateString('zh-TW');
     document.getElementById('avoidRepeatChk').checked = !!state.avoidRepeat;
-    document.getElementById('nextRoundBtn').disabled = Object.keys(state.assignments).length < state.students.length;
+    document.getElementById('nextRoundBtn').disabled = Object.keys(state.assignments).length < activeStudents().length;
   }
   document.getElementById('sortByStudentBtn').addEventListener('click', function(){ resultSort='student'; renderResult(); });
   document.getElementById('sortByJobBtn').addEventListener('click', function(){ resultSort='job'; renderResult(); });
@@ -929,11 +967,17 @@
     var mgrSel = document.getElementById('managerFilter');
     var lines = [['座號/姓名','分配工作','分區','頻率','負責幹部','備註'].join(',')];
     state.students.forEach(function(name){
-      var jobId = state.assignments[name];
-      var job = jobId ? jobById(jobId) : null;
-      var mgr = job ? (job.manager||'') : '';
-      if(mgrSel.value!=='all' && mgr!==mgrSel.value) return;
-      var row = [name, job? job.name:'', job? job.zone:'', job? freqLabel[job.freq]:'', mgr, job? (job.note||'').replace(/,/g,'、'):''];
+      var row;
+      if(isExcluded(name)){
+        if(mgrSel.value!=='all' && mgrSel.value!==EXCLUDED_MANAGER_LABEL) return;
+        row = [name, '教師指派', '', '', EXCLUDED_MANAGER_LABEL, excludedNote(name).replace(/,/g,'、')];
+      } else {
+        var jobId = state.assignments[name];
+        var job = jobId ? jobById(jobId) : null;
+        var mgr = job ? (job.manager||'') : '';
+        if(mgrSel.value!=='all' && mgr!==mgrSel.value) return;
+        row = [name, job? job.name:'', job? job.zone:'', job? freqLabel[job.freq]:'', mgr, job? (job.note||'').replace(/,/g,'、'):''];
+      }
       lines.push(row.map(function(v){ return '"'+String(v).replace(/"/g,'""')+'"'; }).join(','));
     });
     var csv = '﻿' + lines.join('\r\n');
@@ -944,7 +988,7 @@
   });
 
   document.getElementById('nextRoundBtn').addEventListener('click', function(){
-    if(Object.keys(state.assignments).length < state.students.length) return;
+    if(Object.keys(state.assignments).length < activeStudents().length) return;
     if(!confirm('確定要開始下一輪抽籤嗎？這輪結果會保存為歷史紀錄，工作將重新分配。')) return;
     state.history.push(Object.assign({}, state.assignments));
     state.assignments = {};
