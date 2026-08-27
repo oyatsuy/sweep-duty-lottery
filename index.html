@@ -108,6 +108,16 @@
   @media (prefers-color-scheme:dark){ #swapMsg.ok{ color:var(--board-deep); } }
   :root[data-theme="dark"] #swapMsg.ok{ color:var(--board-deep); }
 
+  .option-manager{ margin-top:14px; border:1px solid var(--line); border-radius:9px; padding:10px 12px; }
+  .option-manager summary{ cursor:pointer; font-weight:600; font-size:.85rem; color:var(--ink); }
+  .option-manager summary:focus-visible{ outline:2px solid var(--stamp); outline-offset:2px; }
+  .option-chip-list{ display:flex; flex-wrap:wrap; gap:6px; }
+  .chip-opt{ display:inline-flex; align-items:center; gap:6px; background:var(--paper); border:1px solid var(--line); border-radius:999px; padding:4px 6px 4px 10px; font-size:.8rem; }
+  .chip-opt-used{ font-size:.68rem; color:var(--ink-soft); }
+  .chip-opt-del{ border:none; background:transparent; color:var(--stamp); font-weight:800; cursor:pointer; font-size:.95rem; line-height:1; padding:2px 5px; border-radius:50%; }
+  .chip-opt-del:hover{ background: color-mix(in srgb, var(--stamp) 16%, transparent); }
+  .chip-opt-del:focus-visible{ outline:2px solid var(--stamp); outline-offset:1px; }
+
   table{ width:100%; border-collapse: collapse; font-size:.86rem; }
   .table-wrap{ overflow-x:auto; border:1px solid var(--line); border-radius:10px; }
   th, td{ padding:7px 7px; border-bottom:1px solid var(--line); text-align:left; vertical-align:middle; }
@@ -274,6 +284,14 @@
               <tbody id="jobTableBody"></tbody>
             </table>
           </div>
+          <details class="option-manager">
+            <summary>管理分區／負責幹部選項清單</summary>
+            <p class="hint">用久了選單太長，可以在這裡刪除不用的選項；正在被工作使用中的會保留、無法刪除。</p>
+            <div class="field-label" style="margin-bottom:4px;">分區</div>
+            <div id="zoneOptionsList" class="option-chip-list"></div>
+            <div class="field-label" style="margin:10px 0 4px;">負責幹部</div>
+            <div id="managerOptionsList" class="option-chip-list"></div>
+          </details>
           <div id="setupBanner"></div>
           <div class="btn-row">
             <button class="btn btn-stamp" id="startDrawBtn" type="button">開始抽籤 →</button>
@@ -595,7 +613,7 @@
             if(state.zoneOptions.indexOf(name)===-1) state.zoneOptions.push(name);
             job.zone = name; save(); renderJobTable();
           } else { selZone.value = job.zone; }
-        } else { job.zone = selZone.value; save(); updateTitle(); }
+        } else { job.zone = selZone.value; save(); updateTitle(); renderOptionLists(); }
       });
       tdZone.appendChild(selZone); tr.appendChild(tdZone);
 
@@ -627,7 +645,7 @@
             if(state.managerOptions.indexOf(name)===-1) state.managerOptions.push(name);
             job.manager = name; save(); renderJobTable();
           } else { selMgr.value = job.manager||''; }
-        } else { job.manager = selMgr.value; save(); }
+        } else { job.manager = selMgr.value; save(); renderOptionLists(); }
       });
       tdMgr.appendChild(selMgr); tr.appendChild(tdMgr);
 
@@ -644,6 +662,39 @@
       jobTableBody.appendChild(tr);
     });
     updateTitle();
+    renderOptionLists();
+  }
+
+  // 管理分區／負責幹部的「建議清單」：正在被工作使用中的選項不給刪，避免刪掉後工作變空白。
+  function renderOptionLists(){
+    var usedZones = {}; state.jobs.forEach(function(j){ if(j.zone) usedZones[j.zone]=true; });
+    var usedManagers = {}; state.jobs.forEach(function(j){ if(j.manager) usedManagers[j.manager]=true; });
+
+    function renderList(containerId, list, usedMap, removeFn){
+      var el = document.getElementById(containerId);
+      el.innerHTML = '';
+      if(list.length===0){ el.innerHTML = '<span class="hint" style="margin:0;">（沒有已儲存的選項）</span>'; return; }
+      list.forEach(function(name){
+        var chip = document.createElement('span'); chip.className = 'chip-opt';
+        var label = document.createElement('span'); label.textContent = name; chip.appendChild(label);
+        if(usedMap[name]){
+          var tag = document.createElement('span'); tag.className='chip-opt-used'; tag.textContent='使用中'; chip.appendChild(tag);
+        } else {
+          var del = document.createElement('button'); del.type='button'; del.className='chip-opt-del'; del.title='刪除這個選項'; del.textContent='×';
+          del.addEventListener('click', function(){ removeFn(name); });
+          chip.appendChild(del);
+        }
+        el.appendChild(chip);
+      });
+    }
+    renderList('zoneOptionsList', state.zoneOptions, usedZones, function(name){
+      state.zoneOptions = state.zoneOptions.filter(function(z){ return z!==name; });
+      save(); renderJobTable();
+    });
+    renderList('managerOptionsList', state.managerOptions, usedManagers, function(name){
+      state.managerOptions = state.managerOptions.filter(function(m){ return m!==name; });
+      save(); renderJobTable();
+    });
   }
 
   document.getElementById('addJobBtn').addEventListener('click', function(){
