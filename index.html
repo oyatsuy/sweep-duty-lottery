@@ -281,6 +281,7 @@
             <button class="btn btn-ghost btn-sm" id="importConfigBtn" type="button">匯入設定 (JSON)</button>
             <input type="file" id="importConfigInput" accept="application/json" style="display:none">
             <button class="btn btn-ghost btn-sm" id="resetAllBtn" type="button">全部清除重設</button>
+            <span id="exportMsg" class="hint" style="margin:0;"></span>
           </div>
         </div>
       </div>
@@ -353,6 +354,7 @@
             <button class="btn btn-wood btn-sm" id="sortByJobBtn" type="button">依工作排序</button>
             <button class="btn btn-ghost btn-sm" id="printBtn" type="button">列印</button>
             <button class="btn btn-ghost btn-sm" id="csvBtn" type="button">匯出 CSV</button>
+            <span id="csvMsg" class="hint" style="margin:0;"></span>
           </div>
         </div>
 
@@ -479,6 +481,39 @@
   }
   function zoneCssVar(zone){ return cssVarByClass[zoneClass(zone)]; }
   function escapeHtml(s){ return String(s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+
+  // 存檔：在 claude.ai Artifact 裡瀏覽器不給網頁自己觸發下載，改用平台的 downloads 能力跳出存檔確認；
+  // 在 GitHub Pages／本機檔案（沒有 window.claude）就照舊用 <a download> 觸發瀏覽器下載，兩邊都能用。
+  function legacyDownload(filename, text){
+    var blob = new Blob([text], {type:'text/plain;charset=utf-8;'});
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a'); a.href=url; a.download=filename;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+  }
+  function saveFile(filename, text, onDone){
+    onDone = onDone || function(){};
+    if(!(window.claude && typeof window.claude.use === 'function')){
+      legacyDownload(filename, text); onDone('legacy'); return;
+    }
+    window.claude.use('downloads').then(function(downloads){
+      if(!downloads){ legacyDownload(filename, text); onDone('legacy'); return; }
+      downloads.save({ filename: filename, data: text }).then(function(){
+        onDone('saved');
+      }).catch(function(err){
+        var code = err && err.code;
+        if(code === 'extension_not_enabled' || code === 'rejected_extension'){
+          var altName = filename.replace(/\.[^.]+$/, '.txt');
+          downloads.save({ filename: altName, data: text }).then(function(){
+            onDone('saved-as-txt', altName);
+          }).catch(function(){ onDone('failed', null, err); });
+          return;
+        }
+        if(code === 'declined'){ onDone('declined'); return; }
+        // 其他狀況（不支援／未授權等）盡量退回舊方法試試看
+        legacyDownload(filename, text); onDone('legacy-fallback');
+      });
+    }).catch(function(){ legacyDownload(filename, text); onDone('legacy'); });
+  }
 
   // ---------- navigation ----------
   var steps = ['setup','draw','result'];
@@ -668,11 +703,15 @@
   });
 
   document.getElementById('exportConfigBtn').addEventListener('click', function(){
+    var msg = document.getElementById('exportMsg');
     var payload = { students: state.students, jobs: state.jobs, excluded: state.excluded, animStyle: state.animStyle, zoneOptions: state.zoneOptions, managerOptions: state.managerOptions };
-    var blob = new Blob(['﻿'+JSON.stringify(payload,null,2)], {type:'application/json;charset=utf-8;'});
-    var url = URL.createObjectURL(blob);
-    var a = document.createElement('a'); a.href=url; a.download='掃地工作設定.json';
-    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+    msg.textContent = '存檔中…';
+    saveFile('掃地工作設定.json', '﻿'+JSON.stringify(payload,null,2), function(status){
+      if(status==='saved' || status==='legacy' || status==='legacy-fallback'){ msg.textContent = '✓ 已存檔'; }
+      else if(status==='saved-as-txt'){ msg.textContent = '✓ 已存成 .txt（副檔名限制，內容不變）'; }
+      else if(status==='declined'){ msg.textContent = '已取消'; }
+      else { msg.textContent = '存檔失敗，請改用「傳送檔案」或聯絡我'; }
+    });
   });
   document.getElementById('importConfigBtn').addEventListener('click', function(){
     document.getElementById('importConfigInput').click();
@@ -1032,10 +1071,14 @@
       lines.push(row.map(function(v){ return '"'+String(v).replace(/"/g,'""')+'"'; }).join(','));
     });
     var csv = '﻿' + lines.join('\r\n');
-    var blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
-    var url = URL.createObjectURL(blob);
-    var a = document.createElement('a'); a.href = url; a.download = '掃地工作分配表_第'+state.round+'輪.csv';
-    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+    var msg = document.getElementById('csvMsg');
+    msg.textContent = '存檔中…';
+    saveFile('掃地工作分配表_第'+state.round+'輪.csv', csv, function(status, altName){
+      if(status==='saved' || status==='legacy' || status==='legacy-fallback'){ msg.textContent = '✓ 已存檔'; }
+      else if(status==='saved-as-txt'){ msg.textContent = '✓ 已存成 '+altName+'（副檔名限制，內容還是逗號分隔，可用 Excel 開）'; }
+      else if(status==='declined'){ msg.textContent = '已取消'; }
+      else { msg.textContent = '存檔失敗，請改用「列印」或聯絡我'; }
+    });
   });
 
   document.getElementById('nextRoundBtn').addEventListener('click', function(){
