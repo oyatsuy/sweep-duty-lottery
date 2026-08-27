@@ -98,6 +98,16 @@
   .seatgen input{ width:90px; padding:6px 8px; }
   .seatgen input.wide{ width:150px; }
 
+  .swapbox{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:14px; padding:10px; border:1px dashed var(--line); border-radius:9px; }
+  .swapbox select{ width:auto; min-width:160px; padding:7px 8px; font-size:.85rem; }
+  .swap-arrow{ font-size:1.1rem; color:var(--wood-deep); font-weight:700; }
+  @media (prefers-color-scheme:dark){ .swap-arrow{ color:var(--wood); } }
+  :root[data-theme="dark"] .swap-arrow{ color:var(--wood); }
+  #swapMsg{ font-size:.8rem; color:var(--ink-soft); }
+  #swapMsg.ok{ color:var(--board); font-weight:600; }
+  @media (prefers-color-scheme:dark){ #swapMsg.ok{ color:var(--board-deep); } }
+  :root[data-theme="dark"] #swapMsg.ok{ color:var(--board-deep); }
+
   table{ width:100%; border-collapse: collapse; font-size:.86rem; }
   .table-wrap{ overflow-x:auto; border:1px solid var(--line); border-radius:10px; }
   th, td{ padding:7px 7px; border-bottom:1px solid var(--line); text-align:left; vertical-align:middle; }
@@ -345,6 +355,16 @@
             <button class="btn btn-ghost btn-sm" id="csvBtn" type="button">匯出 CSV</button>
           </div>
         </div>
+
+        <div class="swapbox no-print">
+          <label class="field-label" style="margin-bottom:0;">學生互換工作</label>
+          <select id="swapA"></select>
+          <span class="swap-arrow">⇄</span>
+          <select id="swapB"></select>
+          <button class="btn btn-wood btn-sm" id="swapBtn" type="button">交換</button>
+          <span id="swapMsg"></span>
+        </div>
+
         <div class="table-wrap">
           <table class="result-table">
             <thead><tr><th>座號 / 姓名</th><th>分配工作</th><th>分區</th><th>負責幹部</th><th>備註</th></tr></thead>
@@ -955,11 +975,42 @@
     document.getElementById('printMeta').textContent = '掃地工作分配表　第 '+state.round+' 輪　列印範圍：'+(mgrSel.value==='all'?'全部':mgrSel.value)+'　產出日期：'+new Date().toLocaleDateString('zh-TW');
     document.getElementById('avoidRepeatChk').checked = !!state.avoidRepeat;
     document.getElementById('nextRoundBtn').disabled = Object.keys(state.assignments).length < activeStudents().length;
+    populateSwapSelects();
   }
   document.getElementById('sortByStudentBtn').addEventListener('click', function(){ resultSort='student'; renderResult(); });
   document.getElementById('sortByJobBtn').addEventListener('click', function(){ resultSort='job'; renderResult(); });
   document.getElementById('avoidRepeatChk').addEventListener('change', function(e){ state.avoidRepeat = e.target.checked; save(); });
   document.getElementById('managerFilter').addEventListener('change', renderResult);
+
+  // ---------- swap two students' jobs after the draw ----------
+  function populateSwapSelects(){
+    var selA = document.getElementById('swapA'), selB = document.getElementById('swapB');
+    var prevA = selA.value, prevB = selB.value;
+    var options = state.students.filter(function(name){ return name in state.assignments; }).map(function(name){
+      var job = jobById(state.assignments[name]);
+      return { value: name, label: name + '（' + (job ? job.name : '') + '）' };
+    });
+    [selA, selB].forEach(function(sel, idx){
+      var keep = idx===0 ? prevA : prevB;
+      sel.innerHTML = '';
+      options.forEach(function(o){
+        var opt = document.createElement('option'); opt.value=o.value; opt.textContent=o.label;
+        sel.appendChild(opt);
+      });
+      if(options.some(function(o){ return o.value===keep; })) sel.value = keep;
+    });
+  }
+  document.getElementById('swapBtn').addEventListener('click', function(){
+    var a = document.getElementById('swapA').value, b = document.getElementById('swapB').value;
+    var msg = document.getElementById('swapMsg');
+    if(!a || !b || a===b){ msg.textContent = '請選擇兩位不同的同學'; msg.className=''; return; }
+    var tmp = state.assignments[a];
+    state.assignments[a] = state.assignments[b];
+    state.assignments[b] = tmp;
+    save();
+    msg.textContent = '✓ 已互換：'+a+' ⇄ '+b; msg.className='ok';
+    renderResult();
+  });
 
   document.getElementById('printBtn').addEventListener('click', function(){ window.print(); });
 
@@ -1002,6 +1053,7 @@
   renderSetupBanner();
 })();
 </script>
+
 
 </body>
 </html>
