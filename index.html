@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <title>掃地工作抽籤</title>
-<meta name="description" content="全班掃地工作分配抽籤工具：每項工作單一負責人，含轉盤/老虎機抽籤動畫、可依實際場地編輯、負責幹部分組列印。資料只存在本機瀏覽器。">
+<meta name="description" content="全班掃地工作分配抽籤工具：先自願認領、再抽籤，每項工作單一負責人。資料只存在本機瀏覽器。">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧹</text></svg>">
 </head>
 <body>
@@ -107,6 +107,11 @@
   #swapMsg.ok{ color:var(--board); font-weight:600; }
   @media (prefers-color-scheme:dark){ #swapMsg.ok{ color:var(--board-deep); } }
   :root[data-theme="dark"] #swapMsg.ok{ color:var(--board-deep); }
+
+  #volunteerMsg{ font-size:.8rem; color:var(--ink-soft); }
+  #volunteerMsg.ok{ color:var(--board); font-weight:600; }
+  @media (prefers-color-scheme:dark){ #volunteerMsg.ok{ color:var(--board-deep); } }
+  :root[data-theme="dark"] #volunteerMsg.ok{ color:var(--board-deep); }
 
   .option-manager{ margin-top:14px; border:1px solid var(--line); border-radius:9px; padding:10px 12px; }
   .option-manager summary{ cursor:pointer; font-weight:600; font-size:.85rem; color:var(--ink); }
@@ -239,8 +244,9 @@
 
   <nav class="stepper" role="tablist">
     <button class="step-btn active" data-step="setup" type="button">1・設定名單與工作</button>
-    <button class="step-btn" data-step="draw" type="button">2・抽籤</button>
-    <button class="step-btn" data-step="result" type="button">3・結果</button>
+    <button class="step-btn" data-step="volunteer" type="button">2・自願認領</button>
+    <button class="step-btn" data-step="draw" type="button">3・抽籤</button>
+    <button class="step-btn" data-step="result" type="button">4・結果</button>
   </nav>
 
   <main>
@@ -294,13 +300,45 @@
           </details>
           <div id="setupBanner"></div>
           <div class="btn-row">
-            <button class="btn btn-stamp" id="startDrawBtn" type="button">開始抽籤 →</button>
+            <button class="btn btn-stamp" id="startDrawBtn" type="button">下一步：自願認領 →</button>
             <button class="btn btn-ghost btn-sm" id="exportConfigBtn" type="button">匯出設定 (JSON)</button>
             <button class="btn btn-ghost btn-sm" id="importConfigBtn" type="button">匯入設定 (JSON)</button>
             <input type="file" id="importConfigInput" accept="application/json" style="display:none">
             <button class="btn btn-ghost btn-sm" id="resetAllBtn" type="button">全部清除重設</button>
             <span id="exportMsg" class="hint" style="margin:0;"></span>
           </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- VOLUNTEER -->
+    <section id="panel-volunteer" class="panel">
+      <div class="card">
+        <h2>自願認領（可跳過）</h2>
+        <p class="hint">有同學想指定工作的話，可以在這裡直接認領；認領完的同學和工作都不會再進入下面的抽籤。其餘同學到下一步統一抽籤。</p>
+        <p class="turn-label" id="volunteerProgress"></p>
+
+        <div class="swapbox">
+          <select id="volunteerStudent"></select>
+          <span class="swap-arrow">→</span>
+          <select id="volunteerJob"></select>
+          <button class="btn btn-wood btn-sm" id="volunteerClaimBtn" type="button">認領</button>
+          <span id="volunteerMsg"></span>
+        </div>
+
+        <div class="table-wrap" id="volunteerListWrap" style="display:none;">
+          <table>
+            <thead><tr><th>座號 / 姓名</th><th>認領工作</th><th></th></tr></thead>
+            <tbody id="volunteerListBody"></tbody>
+          </table>
+        </div>
+
+        <label class="field-label" style="margin-top:16px;">剩餘工作名額</label>
+        <div class="job-remain-list" id="volunteerJobRemainList"></div>
+
+        <div class="btn-row no-print" style="border-top:1px solid var(--line); padding-top:14px; margin-top:24px;">
+          <button class="btn btn-ghost btn-sm" id="backToSetupFromVolunteerBtn" type="button">← 回設定</button>
+          <button class="btn btn-stamp" id="goToDrawBtn" type="button">前往抽籤 →</button>
         </div>
       </div>
     </section>
@@ -350,7 +388,7 @@
 
         <div class="btn-row center no-print" style="border-top:1px solid var(--line); padding-top:14px; margin-top:24px;">
           <button class="btn btn-ghost btn-sm" id="autoFinishBtn" type="button">剩餘全部自動抽完</button>
-          <button class="btn btn-ghost btn-sm" id="backSetupBtn" type="button">← 回設定</button>
+          <button class="btn btn-ghost btn-sm" id="backSetupBtn" type="button">← 回自願認領</button>
         </div>
 
         <div class="job-remain-list" id="jobRemainList"></div>
@@ -387,7 +425,7 @@
 
         <div class="table-wrap">
           <table class="result-table">
-            <thead><tr><th>座號 / 姓名</th><th>分配工作</th><th>分區</th><th>負責幹部</th><th>備註</th></tr></thead>
+            <thead><tr><th>座號 / 姓名</th><th>分配工作</th><th>分區</th><th>方式</th><th>負責幹部</th><th>備註</th></tr></thead>
             <tbody id="resultTableBody"></tbody>
           </table>
         </div>
@@ -463,13 +501,14 @@
   var DEFAULT_MANAGER_OPTIONS = ['衛生股長','衛生幹事'];
   var EXCLUDED_MANAGER_LABEL = '教師指派';
   function freshState(){
-    return { students: defaultStudents(), jobs: defaultJobs(), excluded: [], assignments:{}, round:1, history:[], avoidRepeat:false, started:false, animStyle:'tube', zoneOptions: DEFAULT_ZONE_OPTIONS.slice(), managerOptions: DEFAULT_MANAGER_OPTIONS.slice() };
+    return { students: defaultStudents(), jobs: defaultJobs(), excluded: [], assignments:{}, volunteered:{}, round:1, history:[], avoidRepeat:false, started:false, animStyle:'tube', zoneOptions: DEFAULT_ZONE_OPTIONS.slice(), managerOptions: DEFAULT_MANAGER_OPTIONS.slice() };
   }
   var state = load() || freshState();
   if(!state.animStyle) state.animStyle = 'tube';
   if(!state.zoneOptions) state.zoneOptions = DEFAULT_ZONE_OPTIONS.slice();
   if(!state.managerOptions) state.managerOptions = DEFAULT_MANAGER_OPTIONS.slice();
   if(!Array.isArray(state.excluded)) state.excluded = [];
+  if(!state.volunteered) state.volunteered = {};
 
   function isExcluded(seat){ return state.excluded.some(function(e){ return e.seat===seat; }); }
   function excludedNote(seat){ var e = state.excluded.filter(function(x){ return x.seat===seat; })[0]; return e ? e.note : ''; }
@@ -534,12 +573,13 @@
   }
 
   // ---------- navigation ----------
-  var steps = ['setup','draw','result'];
+  var steps = ['setup','volunteer','draw','result'];
   function goStep(step){
     steps.forEach(function(s){
       document.getElementById('panel-'+s).classList.toggle('active', s===step);
       document.querySelector('.step-btn[data-step="'+s+'"]').classList.toggle('active', s===step);
     });
+    if(step==='volunteer') renderVolunteer();
     if(step==='draw') renderDraw();
     if(step==='result') renderResult();
   }
@@ -742,7 +782,7 @@
 
   document.getElementById('startDrawBtn').addEventListener('click', function(){
     if(totalJobCount() !== activeStudents().length || activeStudents().length===0) return;
-    state.started = true; save(); goStep('draw');
+    state.started = true; save(); goStep('volunteer');
   });
 
   document.getElementById('resetAllBtn').addEventListener('click', function(){
@@ -773,13 +813,14 @@
     reader.onload = function(){
       try{
         var data = JSON.parse(String(reader.result).replace(/^﻿/,''));
-        if(!confirm('匯入後將覆蓋目前的名單與工作清單，確定嗎？')) return;
+        if(!confirm('匯入後將覆蓋目前的名單與工作清單，抽籤／認領進度也會一併清空，確定嗎？')) return;
         if(Array.isArray(data.students)) state.students = data.students;
         if(Array.isArray(data.jobs)) state.jobs = data.jobs;
         if(Array.isArray(data.excluded)) state.excluded = data.excluded;
         if(data.animStyle) state.animStyle = data.animStyle;
         if(Array.isArray(data.zoneOptions)) state.zoneOptions = data.zoneOptions;
         if(Array.isArray(data.managerOptions)) state.managerOptions = data.managerOptions;
+        state.assignments = {}; state.volunteered = {};
         studentInput.value = state.students.join('\n');
         excludedInput.value = state.excluded.map(function(e){ return e.note ? (e.seat+' '+e.note) : e.seat; }).join('\n');
         save(); renderJobTable(); renderSetupBanner();
@@ -843,10 +884,10 @@
       document.getElementById('turnHint').textContent = '請這位同學上前抽籤';
       document.getElementById('turnName').textContent = nextName;
     }
-    renderJobRemainList();
+    renderJobRemainList('jobRemainList');
   }
-  function renderJobRemainList(){
-    var wrap = document.getElementById('jobRemainList'); wrap.innerHTML = '';
+  function renderJobRemainList(containerId){
+    var wrap = document.getElementById(containerId); wrap.innerHTML = '';
     state.jobs.forEach(function(job){
       var r = remainingFor(job);
       var el = document.createElement('div'); el.className = 'job-remain' + (r<=0 ? ' empty':'');
@@ -854,6 +895,75 @@
       wrap.appendChild(el);
     });
   }
+
+  // ---------- volunteer (自願認領，先於抽籤) ----------
+  function volunteerAvailableStudents(){
+    return activeStudents().filter(function(name){ return !(name in state.assignments); });
+  }
+  function renderVolunteer(){
+    var avail = volunteerAvailableStudents();
+    var total = activeStudents().length;
+    var claimedCount = Object.keys(state.volunteered).length;
+    document.getElementById('volunteerProgress').textContent =
+      claimedCount>0 ? ('已有 '+claimedCount+' 位同學自願認領，還有 '+avail.length+' / '+total+' 位同學要抽籤')
+                     : ('目前還沒有人認領，共 '+total+' 位同學要抽籤');
+
+    var selStudent = document.getElementById('volunteerStudent');
+    var keepStudent = selStudent.value;
+    selStudent.innerHTML = '';
+    avail.forEach(function(name){
+      var opt = document.createElement('option'); opt.value=name; opt.textContent=name; selStudent.appendChild(opt);
+    });
+    if(avail.indexOf(keepStudent)!==-1) selStudent.value = keepStudent;
+
+    var selJob = document.getElementById('volunteerJob');
+    var keepJob = selJob.value;
+    selJob.innerHTML = '';
+    state.jobs.forEach(function(job){
+      if(remainingFor(job) <= 0) return;
+      var opt = document.createElement('option'); opt.value=job.id; opt.textContent = job.name+'（剩 '+remainingFor(job)+'）'; selJob.appendChild(opt);
+    });
+    if(state.jobs.some(function(j){ return j.id===keepJob && remainingFor(j)>0; })) selJob.value = keepJob;
+
+    document.getElementById('volunteerClaimBtn').disabled = (avail.length===0 || selJob.options.length===0);
+
+    var listWrap = document.getElementById('volunteerListWrap');
+    var listBody = document.getElementById('volunteerListBody');
+    listBody.innerHTML = '';
+    var claimedNames = Object.keys(state.volunteered).filter(function(n){ return n in state.assignments; });
+    listWrap.style.display = claimedNames.length ? '' : 'none';
+    claimedNames.sort(function(a,b){ return a.localeCompare(b,'zh-Hant',{numeric:true}); }).forEach(function(name){
+      var job = jobById(state.assignments[name]);
+      var tr = document.createElement('tr');
+      var tdName = document.createElement('td'); tdName.textContent = name; tdName.style.fontFamily='var(--font-num)';
+      var tdJob = document.createElement('td'); tdJob.textContent = job ? job.name : '';
+      var tdUndo = document.createElement('td');
+      var undoBtn = document.createElement('button'); undoBtn.className='btn btn-ghost btn-sm'; undoBtn.type='button'; undoBtn.textContent='取消認領';
+      undoBtn.addEventListener('click', function(){
+        delete state.assignments[name]; delete state.volunteered[name]; save(); renderVolunteer();
+      });
+      tdUndo.appendChild(undoBtn);
+      tr.appendChild(tdName); tr.appendChild(tdJob); tr.appendChild(tdUndo);
+      listBody.appendChild(tr);
+    });
+
+    renderJobRemainList('volunteerJobRemainList');
+  }
+  document.getElementById('volunteerClaimBtn').addEventListener('click', function(){
+    var student = document.getElementById('volunteerStudent').value;
+    var jobId = document.getElementById('volunteerJob').value;
+    var msg = document.getElementById('volunteerMsg');
+    if(!student || !jobId){ msg.textContent = '請選擇同學跟工作'; msg.className=''; return; }
+    var job = jobById(jobId);
+    if(!job || remainingFor(job) <= 0){ msg.textContent = '這個工作剛好被認領完了，請重新選擇'; msg.className=''; renderVolunteer(); return; }
+    state.assignments[student] = jobId;
+    state.volunteered[student] = true;
+    save();
+    msg.textContent = '✓ '+student+' 認領了「'+job.name+'」'; msg.className='ok';
+    renderVolunteer();
+  });
+  document.getElementById('backToSetupFromVolunteerBtn').addEventListener('click', function(){ goStep('setup'); });
+  document.getElementById('goToDrawBtn').addEventListener('click', function(){ goStep('draw'); });
 
   function buildWheelGradient(){
     var wheel = document.getElementById('wheelEl');
@@ -899,7 +1009,7 @@
       document.getElementById('slipNote').textContent = job.note || '';
       document.getElementById('slip').classList.add('show');
       document.getElementById('nextBtn').disabled = false;
-      renderJobRemainList();
+      renderJobRemainList('jobRemainList');
       var total = activeStudents().length, doneCount = Object.keys(state.assignments).length;
       document.getElementById('roundLabel').textContent = '第 ' + state.round + ' 輪抽籤　（已完成 ' + doneCount + ' / ' + total + '）';
       document.getElementById('progressFill').style.width = (total? (doneCount/total*100):0) + '%';
@@ -1039,26 +1149,29 @@
       var m = rowManager(r);
       if(groupByManager && m !== lastMgr){
         var trh = document.createElement('tr'); trh.className='group-header';
-        var tdh = document.createElement('td'); tdh.colSpan=5; tdh.textContent = '負責幹部：'+m;
+        var tdh = document.createElement('td'); tdh.colSpan=6; tdh.textContent = '負責幹部：'+m;
         trh.appendChild(tdh); body.appendChild(trh); lastMgr = m;
       }
       var tr = document.createElement('tr');
       var tdName = document.createElement('td'); tdName.textContent = r.name; tdName.style.fontFamily='var(--font-num)';
       var tdJob = document.createElement('td');
       var tdZone = document.createElement('td');
+      var tdMethod = document.createElement('td');
       var tdMgr = document.createElement('td');
       var tdNote = document.createElement('td'); tdNote.className='col-note';
       if(r.excludedFlag){
         tdJob.innerHTML = '<span class="chip badge-flex">教師指派</span>';
+        tdMethod.textContent = '教師指派';
         tdMgr.textContent = EXCLUDED_MANAGER_LABEL;
         tdNote.textContent = r.note || '';
       } else {
         tdJob.textContent = r.job ? r.job.name : '（尚未抽籤）';
         if(r.job){ tdZone.innerHTML = '<span class="zonechip"><span class="dot '+zoneClass(r.job.zone)+'"></span>'+escapeHtml(r.job.zone)+'</span>'; }
+        tdMethod.textContent = r.job ? (state.volunteered[r.name] ? '自願' : '抽籤') : '';
         tdMgr.textContent = r.job ? (r.job.manager||'') : '';
         tdNote.textContent = r.job ? ((r.job.note||'') + (r.job.freq!=='flex' ? '　['+freqLabel[r.job.freq]+']' : '')) : '';
       }
-      tr.appendChild(tdName); tr.appendChild(tdJob); tr.appendChild(tdZone); tr.appendChild(tdMgr); tr.appendChild(tdNote);
+      tr.appendChild(tdName); tr.appendChild(tdJob); tr.appendChild(tdZone); tr.appendChild(tdMethod); tr.appendChild(tdMgr); tr.appendChild(tdNote);
       body.appendChild(tr);
     });
 
@@ -1106,18 +1219,19 @@
 
   document.getElementById('csvBtn').addEventListener('click', function(){
     var mgrSel = document.getElementById('managerFilter');
-    var lines = [['座號/姓名','分配工作','分區','頻率','負責幹部','備註'].join(',')];
+    var lines = [['座號/姓名','分配工作','分區','方式','頻率','負責幹部','備註'].join(',')];
     state.students.forEach(function(name){
       var row;
       if(isExcluded(name)){
         if(mgrSel.value!=='all' && mgrSel.value!==EXCLUDED_MANAGER_LABEL) return;
-        row = [name, '教師指派', '', '', EXCLUDED_MANAGER_LABEL, excludedNote(name).replace(/,/g,'、')];
+        row = [name, '教師指派', '', '教師指派', '', EXCLUDED_MANAGER_LABEL, excludedNote(name).replace(/,/g,'、')];
       } else {
         var jobId = state.assignments[name];
         var job = jobId ? jobById(jobId) : null;
         var mgr = job ? (job.manager||'') : '';
         if(mgrSel.value!=='all' && mgr!==mgrSel.value) return;
-        row = [name, job? job.name:'', job? job.zone:'', job? freqLabel[job.freq]:'', mgr, job? (job.note||'').replace(/,/g,'、'):''];
+        var method = job ? (state.volunteered[name] ? '自願' : '抽籤') : '';
+        row = [name, job? job.name:'', job? job.zone:'', method, job? freqLabel[job.freq]:'', mgr, job? (job.note||'').replace(/,/g,'、'):''];
       }
       lines.push(row.map(function(v){ return '"'+String(v).replace(/"/g,'""')+'"'; }).join(','));
     });
@@ -1137,9 +1251,10 @@
     if(!confirm('確定要開始下一輪抽籤嗎？這輪結果會保存為歷史紀錄，工作將重新分配。')) return;
     state.history.push(Object.assign({}, state.assignments));
     state.assignments = {};
+    state.volunteered = {};
     state.round += 1;
     save();
-    goStep('draw');
+    goStep('volunteer');
   });
 
   // ---------- init ----------
